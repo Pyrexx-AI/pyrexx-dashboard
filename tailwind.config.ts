@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,19 +10,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        pastel: {
-          blue: "#AEC6CF",
-          light: "#EAF1F4", // Very soft tint of pastel blue for backgrounds
-          dark: "#7A9CAE",
-        },
         pyrexx: {
-          purple: "#8952A5",
+          blue: "#48C4C6", // Exact logo cyan/blue
+          purple: "#8952A5", // Exact logo purple
+          darkBg: "#160B24", // Deep purple for Dark Mode background
+          darkCard: "#221136", // Elevated purple for Dark Mode cards
         }
       },
       boxShadow: {
-        // Ultra-soft, dispersed shadow for that "expensive Apple-like" card feel
-        'expensive': '0 20px 40px -15px rgba(174, 198, 207, 0.25)',
-        'expensive-hover': '0 25px 50px -15px rgba(174, 198, 207, 0.4)',
+        'expensive': '0 8px 25px -8px rgba(72, 196, 198, 0.15)',
+        'expensive-dark': '0 8px 25px -8px rgba(137, 82, 165, 0.25)',
       }
     },
   },
