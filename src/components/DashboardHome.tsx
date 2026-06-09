@@ -197,7 +197,11 @@ export default function DashboardHome() {
             <button 
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 md:py-2 rounded-full text-sm font-semibold transition-all duration-300 ${isActive ? 'bg-pyrexx-blue text-white shadow-md' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-pyrexx-purple/20'}`}
+              className={`flex items-center gap-2 px-4 py-2.5 md:py-2 rounded-full text-sm font-bold transition-all duration-300 ${
+                isActive 
+                  ? 'bg-pyrexx-purple/15 dark:bg-pyrexx-purple/25 text-pyrexx-purple dark:text-[#D1A3FF]' 
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-pyrexx-purple/20'
+              }`}
             >
               {item.icon}
               <span className={`${isActive ? 'block' : 'hidden md:block'}`}>{item.label}</span>
