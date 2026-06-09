@@ -1,103 +1,65 @@
-@import "tailwindcss";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
 
-/* ─── Design Tokens ─────────────────────────────────────────────── */
-:root {
-  --background: #F8FAFC;
-  --foreground: #0F172A;
-  --card: #ffffff;
-  --card-border: #E2E8F0;
-  --muted: #64748B;
-}
+// FIX [2]: Use `variable` so the font is available as a CSS var (--font-inter)
+// that @theme can reference, rather than only as a className
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap", // FIX: prevents FOIT (invisible text during font load)
+});
 
-html.dark {
-  --background: #160B24;
-  --foreground: #F1F5F9;
-  --card: #221136;
-  --card-border: rgba(137, 82, 165, 0.2);
-  --muted: #94A3B8;
-  color-scheme: dark;
-}
+export const metadata: Metadata = {
+  title: "Pyrexx AI | Dashboard",
+  description:
+    "Monitor your AI receptionist performance — call pickup rates, bookings, transcripts, and more.",
+  robots: { index: false, follow: false }, // Private dashboard — keep off search
+};
 
-/* ─── Tailwind v4 Theme Registration ────────────────────────────── */
-/* FIX [2]: Reference the Inter variable correctly, not undefined Geist vars */
-/* FIX [21]: Canonical border-radius token (use rounded-card everywhere) */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
+// FIX: Explicit viewport export (Next.js 14+ best practice; ensures no zoom disable)
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // never set maximumScale/userScalable here — that would violate WCAG 1.4.4
+};
 
-  /* Pyrexx brand tokens — canonical source of truth */
-  --color-pyrexx-blue: #48C4C6;
-  --color-pyrexx-purple: #8952A5;
-  --color-pyrexx-darkBg: #160B24;
-  --color-pyrexx-darkCard: #221136;
-  --color-pyrexx-surface: #2A1842;
-
-  /* Font stack — wired to the CSS variable set by next/font in layout */
-  --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
-
-  /* Canonical shadows */
-  --shadow-card: 0 2px 12px -4px rgba(72, 196, 198, 0.12), 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-card-dark: 0 4px 20px -6px rgba(137, 82, 165, 0.3), 0 1px 3px rgba(0,0,0,0.2);
-  --shadow-float: 0 8px 32px -8px rgba(72, 196, 198, 0.18), 0 2px 8px rgba(0,0,0,0.08);
-
-  /* FIX [21]: Single border-radius token for cards */
-  --radius-card: 1.5rem;   /* 24px — used on all cards */
-  --radius-modal: 1.75rem; /* 28px — modals */
-  --radius-pill: 9999px;
-  --radius-item: 0.875rem; /* 14px — inner list items */
-}
-
-/* ─── Base Styles ────────────────────────────────────────────────── */
-/* FIX [1]: Remove Arial override — let next/font Inter take effect */
-/* FIX [3]: Use CSS variable for bg/fg instead of hardcoded Tailwind classes */
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  /* font-family comes from --font-sans / next/font Inter class on <html> */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-/* ─── Reduced Motion ─────────────────────────────────────────────── */
-/* FIX [8]: Respect system accessibility preference */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-
-  /* Framer Motion uses inline styles — this kills its transitions too */
-  [style*="transform"],
-  [style*="opacity"] {
-    transition: none !important;
-  }
-}
-
-/* ─── Scrollbar Styling ──────────────────────────────────────────── */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(137, 82, 165, 0.3) transparent;
-}
-.custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(137, 82, 165, 0.3);
-  border-radius: 9999px;
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-/* ─── Focus Visible ──────────────────────────────────────────────── */
-/* Accessibility: visible focus ring for keyboard nav */
-:focus-visible {
-  outline: 2px solid #48C4C6;
-  outline-offset: 2px;
-  border-radius: 4px;
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    // FIX [3]: No hardcoded light-mode classes on <body>.
+    // bg/fg come from CSS vars (var(--background), var(--foreground)) set in globals.css
+    // The `dark` class is applied by the anti-flash script below before first paint.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          FIX [5] + FIX [20]: Dark mode anti-flash script.
+          Runs synchronously before the page renders, reads localStorage,
+          and applies the `dark` class to <html> — zero flash of wrong theme.
+          suppressHydrationWarning on <html> silences React's hydration mismatch warning.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var theme = localStorage.getItem('pyrexx-theme');
+                if (theme === 'dark') {
+                  document.documentElement.classList.add('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
+      <body
+        className={`${inter.variable} font-sans antialiased`}
+        // FIX [3]: bg/fg from CSS vars — no hardcoded Tailwind color overrides
+      >
+        {children}
+      </body>
+    </html>
+  );
 }
