@@ -10,63 +10,48 @@ export default function LoadingAnimation() {
       initial={{ opacity: 1 }}
       exit={{ 
         opacity: 0,
-        scale: 150, // Massive zoom into the center of the "X"
-        transition: { duration: 0.8, ease: "easeIn" } 
+        scale: 120, // Clean zoom through the center
+        transition: { duration: 0.9, ease: "easeInOut" } 
       }}
     >
       <div className="relative flex flex-col items-center justify-center">
-        {/* Glowing backdrop matching the logo colors */}
+        {/* Soft pulsing background glow */}
         <motion.div
           animate={{
-            scale: [1, 1.2, 1, 1.2, 1, 1.2, 1], // 3 distinct pulses
-            opacity: [0.3, 0.6, 0.3, 0.6, 0.3, 0.6, 0.3],
+            scale: [1, 1.1, 1],
+            opacity: [0.2, 0.4, 0.2],
           }}
-          transition={{ duration: 3, ease: "easeInOut" }}
-          className="absolute w-40 h-40 bg-gradient-to-tr from-pyrexx-cyan to-pyrexx-purple rounded-full blur-3xl z-0"
+          transition={{ duration: 3, ease: "easeInOut", repeat: Infinity }}
+          className="absolute w-48 h-48 bg-pastel-light rounded-full blur-3xl z-0"
         />
 
-        {/* Custom Pyrexx X Logo matched to image */}
-        <motion.div
-          animate={{
-            rotate: 360, // Clockwise rotation
-            scale: [1, 1.1, 1, 1.1, 1, 1.1, 1] // Synced 3 pulses on the logo itself
-          }}
-          transition={{ duration: 3, ease: "easeInOut" }}
-          className="relative z-10 w-32 h-32 drop-shadow-2xl"
-        >
+        {/* Pyrexx 'X' Logo - Color Swapping Animation */}
+        <motion.div className="relative z-10 w-32 h-32 drop-shadow-lg">
           <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible">
-            {/* Pyrexx Cyan Ribbon */}
+            {/* Ribbon 1 (Top-Left to Bottom-Right) */}
             <motion.path
               d="M 25 20 L 45 20 L 75 80 L 55 80 Z"
-              fill="url(#cyan-gradient)"
-              stroke="#1a1a1a"
-              strokeWidth="1.5"
+              strokeWidth="2"
               strokeLinejoin="round"
-              initial={{ pathLength: 0, fillOpacity: 0 }}
-              animate={{ pathLength: 1, fillOpacity: 1 }}
-              transition={{ duration: 1.5, ease: "easeOut" }}
+              fill="currentColor"
+              animate={{
+                color: ["#AEC6CF", "#8952A5", "#AEC6CF"], // Pastel Blue -> Purple -> Pastel Blue
+                stroke: ["#7A9CAE", "#6B3B83", "#7A9CAE"]
+              }}
+              transition={{ duration: 2, ease: "easeInOut", repeat: Infinity }}
             />
-            {/* Pyrexx Purple Ribbon */}
+            {/* Ribbon 2 (Top-Right to Bottom-Left) */}
             <motion.path
               d="M 75 20 L 55 20 L 25 80 L 45 80 Z"
-              fill="url(#purple-gradient)"
-              stroke="#1a1a1a"
-              strokeWidth="1.5"
+              strokeWidth="2"
               strokeLinejoin="round"
-              initial={{ pathLength: 0, fillOpacity: 0 }}
-              animate={{ pathLength: 1, fillOpacity: 1 }}
-              transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
+              fill="currentColor"
+              animate={{
+                color: ["#8952A5", "#AEC6CF", "#8952A5"], // Purple -> Pastel Blue -> Purple
+                stroke: ["#6B3B83", "#7A9CAE", "#6B3B83"]
+              }}
+              transition={{ duration: 2, ease: "easeInOut", repeat: Infinity }}
             />
-            <defs>
-              <linearGradient id="cyan-gradient" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#48C4C6" />
-                <stop offset="100%" stopColor="#2A9D9F" />
-              </linearGradient>
-              <linearGradient id="purple-gradient" x1="1" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#8952A5" />
-                <stop offset="100%" stopColor="#6B3B83" />
-              </linearGradient>
-            </defs>
           </svg>
         </motion.div>
       </div>

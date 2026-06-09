@@ -9,16 +9,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        pastel: {
+          blue: "#AEC6CF",
+          light: "#EAF1F4", // Very soft tint of pastel blue for backgrounds
+          dark: "#7A9CAE",
+        },
         pyrexx: {
-          cyan: "#48C4C6",
           purple: "#8952A5",
-          light: "#F0FAFA", // Soft cyan-tinted background
-          dark: "#2A1838", // Deep complementary purple for dark text
-          glow: "#CBECEE",
         }
       },
-      animation: {
-        'spin-slow': 'spin 3s linear infinite',
+      boxShadow: {
+        // Ultra-soft, dispersed shadow for that "expensive Apple-like" card feel
+        'expensive': '0 20px 40px -15px rgba(174, 198, 207, 0.25)',
+        'expensive-hover': '0 25px 50px -15px rgba(174, 198, 207, 0.4)',
       }
     },
   },
