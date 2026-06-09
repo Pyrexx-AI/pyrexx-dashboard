@@ -9,14 +9,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        pastel: {
-          blue: "#AEC6CF",
-          light: "#E8F0F2",
-          dark: "#7A9CAE",
-          glow: "#C4DEE7",
-        },
-        accent: {
-          orange: "#FFD1BA", // Subtle pastel orange for the requested loading glow
+        pyrexx: {
+          cyan: "#48C4C6",
+          purple: "#8952A5",
+          light: "#F0FAFA", // Soft cyan-tinted background
+          dark: "#2A1838", // Deep complementary purple for dark text
+          glow: "#CBECEE",
         }
       },
       animation: {

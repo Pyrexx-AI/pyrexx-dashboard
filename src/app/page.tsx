@@ -8,16 +8,16 @@ import DashboardHome from "@/components/DashboardHome";
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
 
-  // Simulate the 3 "pulses" (approx 3.5 seconds) before zooming into the dashboard
+  // Synchronize perfectly with the 3.2s loading animation timeline
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 3500);
+    }, 3200);
     return () => clearTimeout(timer);
   }, []);
 
   return (
-    <main className="relative min-h-screen overflow-hidden">
+    <main className="relative min-h-screen overflow-hidden bg-slate-50">
       <AnimatePresence mode="wait">
         {isLoading ? (
           <LoadingAnimation key="loading" />

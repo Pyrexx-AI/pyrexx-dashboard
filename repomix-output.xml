@@ -1,0 +1,902 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+AGENTS.md
+CLAUDE.md
+eslint.config.mjs
+next.config.ts
+package.json
+postcss.config.mjs
+public/file.svg
+public/globe.svg
+public/next.svg
+public/vercel.svg
+public/window.svg
+README.md
+src/app/favicon.ico
+src/app/globals.css
+src/app/layout.tsx
+src/app/page.tsx
+src/components/DashboardHome.tsx
+src/components/DonutChart.tsx
+src/components/loading_animation.tsx
+src/components/LoadingAnimation.tsx
+src/components/MeetingModal.tsx
+tailwind.config.ts
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/components/LoadingAnimation.tsx">
+"use client";
+
+import React from "react";
+import { motion } from "framer-motion";
+
+export default function LoadingAnimation() {
+  return (
+    <motion.div
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.6, ease: "easeInOut" }}
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white dark:bg-[#0A0B0D]"
+    >
+      <div className="relative flex flex-col items-center">
+        {/* Glowing Background Pulse matching the logo colors */}
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.3, 0.15] }}
+          transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+          className="absolute w-48 h-48 bg-gradient-to-tr from-[#48C4C6] to-[#8952A5] rounded-full blur-3xl"
+        />
+        
+        {/* Animated Custom 'X' Logo */}
+        <div className="relative w-24 h-24 z-10 flex items-center justify-center drop-shadow-2xl">
+          <svg 
+            viewBox="0 0 100 100" 
+            className="w-full h-full overflow-visible" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            {/* Cyan / Teal Stroke */}
+            <motion.path
+              d="M20 20 L80 80"
+              stroke="#48C4C6"
+              strokeWidth="16"
+              strokeLinecap="round"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ 
+                duration: 1.2, 
+                repeat: Infinity, 
+                repeatType: "reverse", 
+                ease: "easeInOut" 
+              }}
+            />
+            {/* Purple Stroke */}
+            <motion.path
+              d="M20 80 L80 20"
+              stroke="#8952A5"
+              strokeWidth="16"
+              strokeLinecap="round"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ 
+                duration: 1.2, 
+                delay: 0.6, // Delays the purple stroke so they "chase" each other
+                repeat: Infinity, 
+                repeatType: "reverse", 
+                ease: "easeInOut" 
+              }}
+            />
+          </svg>
+        </div>
+
+        {/* Loading Text */}
+        <div className="mt-10 flex flex-col items-center z-10">
+          <h2 className="text-3xl font-extrabold tracking-tight flex gap-1.5">
+            <span className="text-gray-900 dark:text-white">Pyrexx</span>
+            <span className="text-gray-500 font-light">AI</span>
+          </h2>
+          <div className="flex items-center mt-3 space-x-1">
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+              Initializing Environment
+            </span>
+          </div>
+        </div>
+
+        {/* Smooth Gradient Progress Bar */}
+        <div className="w-56 h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-8 overflow-hidden z-10">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 2.5, ease: "easeInOut" }}
+            className="h-full bg-gradient-to-r from-[#48C4C6] to-[#8952A5] rounded-full"
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+</file>
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+</file>
+
+<file path="AGENTS.md">
+<!-- BEGIN:nextjs-agent-rules -->
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
+</file>
+
+<file path="CLAUDE.md">
+@AGENTS.md
+</file>
+
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+</file>
+
+<file path="postcss.config.mjs">
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default config;
+</file>
+
+<file path="public/file.svg">
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+</file>
+
+<file path="public/globe.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+</file>
+
+<file path="public/next.svg">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+</file>
+
+<file path="public/vercel.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+</file>
+
+<file path="public/window.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+</file>
+
+<file path="README.md">
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</file>
+
+<file path="src/app/globals.css">
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+</file>
+
+<file path="src/components/DashboardHome.tsx">
+"use client";
+
+import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import { PhoneCall, TrendingUp, Activity, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import DonutChart from "./DonutChart";
+import MeetingModal from "./MeetingModal";
+import { motion, Variants } from "framer-motion"; // Add Variants to your import
+
+// Explicitly type your variants using the Variants type
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { 
+      type: "spring", // Now TypeScript knows this is strictly a Framer Motion spring
+      stiffness: 300, 
+      damping: 24 
+    } 
+  }
+};
+
+export default function DashboardHome() {
+  const [selectedMeeting, setSelectedMeeting] = useState<any>(null);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
+
+  const intentData = [
+    { name: "Botox", value: 45, color: "#AEC6CF" },
+    { name: "Back Massage", value: 35, color: "#7A9CAE" },
+    { name: "General Inquiry", value: 20, color: "#E8F0F2" },
+  ];
+
+  const previousMeetings = [
+    { id: 1, name: "Sarah Jenkins", type: "Botox Consultation", time: "Today, 10:00 AM", status: "Completed", transcriptPreview: "Client asked about recovery time for Botox. Handled successfully and booked follow-up." },
+    { id: 2, name: "Mike Ross", type: "Back Massage", time: "Yesterday, 2:30 PM", status: "Completed", transcriptPreview: "Confirmed 60-minute deep tissue massage. Sent intake forms via SMS." },
+    { id: 3, name: "Emily Clark", type: "Pricing Inquiry", time: "Yesterday, 4:15 PM", status: "Completed", transcriptPreview: "Provided pricing tier list. Client stated they will call back to schedule." },
+  ];
+
+  const upcomingMeetings = [
+    { id: 4, name: "Jessica Alba", type: "Botox Follow-up", time: "Today, 3:00 PM", status: "Scheduled", transcriptPreview: "System automatically fetched this from calendar. Client prefers Dr. Smith." },
+    { id: 5, name: "David Chen", type: "Consultation", time: "Tomorrow, 9:00 AM", status: "Scheduled", transcriptPreview: "First-time visitor. Ensure digital waiver is completed." },
+    { id: 6, name: "Amanda Seyfried", type: "Back Massage", time: "Tomorrow, 11:30 AM", status: "Scheduled", transcriptPreview: "Requested firm pressure. Notes added to CRM." },
+  ];
+
+  return (
+    <motion.div 
+      className="min-h-screen bg-[#F4F9FF] p-6 lg:p-10 font-sans"
+      variants={containerVariants}
+      initial="hidden"
+      animate="show"
+    >
+      {/* Header Section */}
+      <motion.div variants={itemVariants} className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
+            <span className="text-pastel-blue">Pyrexx</span> AI
+          </h1>
+          <p className="text-slate-500 mt-1">Welcome back! Here is your AI Receptionist performance.</p>
+        </div>
+        
+        {/* Promo Banner as requested */}
+        <div className="bg-white border border-pastel-blue rounded-full px-6 py-2 shadow-sm flex items-center gap-3">
+          <span className="w-2 h-2 rounded-full bg-pastel-blue animate-pulse"></span>
+          <p className="text-sm font-medium text-slate-600">
+            Setup Fee: <span className="line-through text-slate-400">$1,000</span> <span className="text-pastel-dark font-bold">$500 (Promo)</span>
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Top Metrics */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {[
+          { title: "Pickup Rate", value: "98.5%", icon: PhoneCall, trend: "+2.1%" },
+          { title: "Conversion Rate", value: "42.3%", icon: TrendingUp, trend: "+5.4%" },
+          { title: "Call Frequency", value: "1,245", icon: Activity, trend: "This Week" }
+        ].map((stat, i) => (
+          <div key={i} className="bg-white p-6 rounded-3xl shadow-sm border border-pastel-light flex items-center justify-between">
+            <div>
+              <p className="text-slate-500 text-sm font-medium mb-1">{stat.title}</p>
+              <h2 className="text-3xl font-bold text-slate-800">{stat.value}</h2>
+              <p className="text-xs text-pastel-dark mt-2 font-medium bg-pastel-light/50 inline-block px-2 py-1 rounded-md">{stat.trend}</p>
+            </div>
+            <div className="h-14 w-14 rounded-full bg-pastel-light flex items-center justify-center text-pastel-dark">
+              <stat.icon size={28} />
+            </div>
+          </div>
+        ))}
+      </motion.div>
+
+      {/* Intents & Call Transcripts Rows */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
+        
+        {/* Top 3 Intents (Donut Charts) */}
+        <motion.div variants={itemVariants} className="col-span-1 lg:col-span-5 bg-white p-6 rounded-3xl shadow-sm border border-pastel-light">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Top Call Intents</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <DonutChart data={[intentData[0], {name: 'Other', value: 55, color: '#f8fafc'}]} title="Botox" />
+            <DonutChart data={[intentData[1], {name: 'Other', value: 65, color: '#f8fafc'}]} title="Massage" />
+            <div className="col-span-2">
+              <DonutChart data={[intentData[2], {name: 'Other', value: 80, color: '#f8fafc'}]} title="Inquiries" />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Top 3 Call Transcripts / Outcomes */}
+        <motion.div variants={itemVariants} className="col-span-1 lg:col-span-7 space-y-4">
+          <h2 className="text-lg font-bold text-slate-800 mb-2">Recent Call Outcomes</h2>
+          {[
+            { title: "Meeting Booked", desc: "Client successfully navigated the AI and booked a session.", icon: CheckCircle, color: "text-green-500", bg: "bg-green-50" },
+            { title: "I'll Call You Back", desc: "Client gathered information and opted to call back later.", icon: Clock, color: "text-yellow-500", bg: "bg-yellow-50" },
+            { title: "Not What I Was Thinking", desc: "Misaligned expectations. Transferred to human support.", icon: AlertCircle, color: "text-red-400", bg: "bg-red-50" },
+          ].map((outcome, i) => (
+            <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-pastel-light flex items-start gap-4">
+              <div className={`p-3 rounded-xl ${outcome.bg} ${outcome.color}`}>
+                <outcome.icon size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800">{outcome.title}</h3>
+                <p className="text-sm text-slate-500 mt-1">{outcome.desc}</p>
+              </div>
+            </div>
+          ))}
+        </motion.div>
+      </div>
+
+      {/* Meetings Section (Left: Last 3, Right: Next 3) */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        {/* Last 3 Meetings */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-pastel-light">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Last 3 Meetings Booked</h2>
+          <div className="space-y-3">
+            {previousMeetings.map((meeting) => (
+              <button 
+                key={meeting.id} 
+                onClick={() => setSelectedMeeting(meeting)}
+                className="w-full text-left bg-slate-50 hover:bg-pastel-light/30 transition-colors p-4 rounded-2xl border border-transparent hover:border-pastel-light group"
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-slate-700">{meeting.name}</h4>
+                    <p className="text-xs text-slate-500 mt-1">{meeting.type}</p>
+                  </div>
+                  <span className="text-xs font-medium text-pastel-dark bg-white px-3 py-1 rounded-full border border-pastel-light group-hover:bg-pastel-blue group-hover:text-white transition-colors">
+                    View CRM
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Next 3 Meetings */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-pastel-light">
+          <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+            Next 3 Meetings <span className="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-1 rounded-full">Synced from Calendar</span>
+          </h2>
+          <div className="space-y-3">
+            {upcomingMeetings.map((meeting) => (
+              <button 
+                key={meeting.id} 
+                onClick={() => setSelectedMeeting(meeting)}
+                className="w-full text-left bg-slate-50 hover:bg-pastel-light/30 transition-colors p-4 rounded-2xl border border-transparent hover:border-pastel-light group"
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-slate-700">{meeting.name}</h4>
+                    <p className="text-xs text-slate-500 mt-1">{meeting.time}</p>
+                  </div>
+                  <span className="text-xs font-medium text-pastel-dark bg-white px-3 py-1 rounded-full border border-pastel-light group-hover:bg-pastel-blue group-hover:text-white transition-colors">
+                    Details
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Modal Integration */}
+      <AnimatePresence>
+        {selectedMeeting && (
+          <MeetingModal 
+            isOpen={!!selectedMeeting} 
+            onClose={() => setSelectedMeeting(null)} 
+            meeting={selectedMeeting} 
+          />
+        )}
+      </AnimatePresence>
+
+    </motion.div>
+  );
+}
+</file>
+
+<file path="src/components/DonutChart.tsx">
+"use client";
+
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+
+interface DonutChartProps {
+  data: { name: string; value: number; color: string }[];
+  title: string;
+}
+
+export default function DonutChart({ data, title }: DonutChartProps) {
+  return (
+    <div className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-pastel-light">
+      <h3 className="text-sm font-semibold text-pastel-dark mb-2">{title}</h3>
+      <div className="h-40 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              innerRadius={45} // Creates the donut hole
+              outerRadius={60}
+              paddingAngle={5}
+              dataKey="value"
+              stroke="none"
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip 
+              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/components/loading_animation.tsx">
+"use client";
+
+import { motion } from "framer-motion";
+
+export default function LoadingAnimation() {
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-white"
+      initial={{ opacity: 1 }}
+      exit={{ 
+        opacity: 0,
+        scale: 50, // Massive zoom into the center of the X
+        transition: { duration: 0.8, ease: "easeInOut" } 
+      }}
+    >
+      <div className="relative flex items-center justify-center">
+        {/* Glowing backdrop circle rotating clockwise */}
+        <motion.div
+          className="absolute w-40 h-40 rounded-full blur-2xl opacity-50"
+          animate={{
+            background: [
+              "conic-gradient(from 0deg, #AEC6CF, #FFD1BA, #AEC6CF)",
+              "conic-gradient(from 360deg, #AEC6CF, #FFD1BA, #AEC6CF)"
+            ]
+          }}
+          transition={{ duration: 1, repeat: 3, ease: "linear" }}
+        />
+
+        {/* The X Logo */}
+        <motion.svg
+          width="120"
+          height="120"
+          viewBox="0 0 100 100"
+          className="relative z-10 drop-shadow-lg"
+          initial={{ rotate: 0 }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 3, ease: "easeInOut" }}
+        >
+          <motion.path
+            d="M 20 20 L 80 80 M 80 20 L 20 80"
+            stroke="#AEC6CF"
+            strokeWidth="12"
+            strokeLinecap="round"
+            fill="transparent"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 1.5, ease: "easeInOut", repeat: 1, repeatType: "reverse" }}
+          />
+          <motion.path
+            d="M 20 20 L 80 80 M 80 20 L 20 80"
+            stroke="#ffffff"
+            strokeWidth="4"
+            strokeLinecap="round"
+            fill="transparent"
+            initial={{ opacity: 0.5 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, yoyo: Infinity }}
+          />
+        </motion.svg>
+      </div>
+    </motion.div>
+  );
+}
+</file>
+
+<file path="src/components/MeetingModal.tsx">
+"use client";
+
+import { motion } from "framer-motion";
+import { X, Calendar, Clock, User, Phone } from "lucide-react";
+
+interface MeetingModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  meeting: {
+    name: string;
+    type: string;
+    time: string;
+    status: string;
+    transcriptPreview?: string;
+  } | null;
+}
+
+export default function MeetingModal({ isOpen, onClose, meeting }: MeetingModalProps) {
+  if (!isOpen || !meeting) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Light backdrop, not too dark/authoritative */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-pastel-dark/20 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 10 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 10 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        className="relative w-full max-w-lg bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col max-h-[60vh]"
+      >
+        <div className="flex justify-between items-center p-6 border-b border-pastel-light">
+          <h2 className="text-xl font-bold text-slate-800">Meeting Details</h2>
+          <button onClick={onClose} className="p-2 bg-slate-50 rounded-full hover:bg-pastel-light transition-colors text-slate-500">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 text-slate-600">
+              <User className="text-pastel-blue" size={20} />
+              <span className="font-medium">{meeting.name}</span>
+            </div>
+            <div className="flex items-center gap-3 text-slate-600">
+              <Phone className="text-pastel-blue" size={20} />
+              <span className="font-medium">{meeting.type}</span>
+            </div>
+            <div className="flex items-center gap-3 text-slate-600">
+              <Clock className="text-pastel-blue" size={20} />
+              <span className="font-medium">{meeting.time}</span>
+            </div>
+            
+            {meeting.transcriptPreview && (
+              <div className="mt-6 p-4 bg-pastel-light/30 rounded-2xl border border-pastel-light">
+                <h4 className="text-sm font-semibold text-pastel-dark mb-2">Transcript Preview</h4>
+                <p className="text-sm text-slate-600 italic leading-relaxed">
+                  "{meeting.transcriptPreview}"
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+</file>
+
+<file path="tailwind.config.ts">
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        pastel: {
+          blue: "#AEC6CF",
+          light: "#E8F0F2",
+          dark: "#7A9CAE",
+          glow: "#C4DEE7",
+        },
+        accent: {
+          orange: "#FFD1BA", // Subtle pastel orange for the requested loading glow
+        }
+      },
+      animation: {
+        'spin-slow': 'spin 3s linear infinite',
+      }
+    },
+  },
+  plugins: [],
+};
+export default config;
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "pyrexx-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.40.0",
+    "lucide-react": "^1.17.0",
+    "next": "16.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="src/app/layout.tsx">
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Pyrexx AI | Dashboard",
+  description: "Custom human-sounding AI receptionists",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body className={`${inter.className} bg-slate-50 text-slate-900`}>{children}</body>
+    </html>
+  );
+}
+</file>
+
+<file path="src/app/page.tsx">
+"use client";
+
+import { useState, useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
+import LoadingAnimation from "@/components/LoadingAnimation";
+import DashboardHome from "@/components/DashboardHome";
+
+export default function Home() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Simulate the 3 "pulses" (approx 3.5 seconds) before zooming into the dashboard
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <main className="relative min-h-screen overflow-hidden">
+      <AnimatePresence mode="wait">
+        {isLoading ? (
+          <LoadingAnimation key="loading" />
+        ) : (
+          <DashboardHome key="dashboard" />
+        )}
+      </AnimatePresence>
+    </main>
+  );
+}
+</file>
+
+</files>
