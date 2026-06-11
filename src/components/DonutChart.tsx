@@ -2,110 +2,74 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { useEffect, useRef, useState } from "react";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
-interface DonutChartProps {
+export interface DonutChartProps {
   title: string;
   value: string;
   subtitle: string;
   percentage: number;
+  trend?: { direction: "up" | "down" | "flat"; label: string };
 }
 
-// FIX [15]: Exported so aria-labelledby can reference a unique ID per chart instance
-let chartIdCounter = 0;
+let _idCounter = 0;
 
-export default function DonutChart({
-  title,
-  value,
-  subtitle,
-  percentage,
-}: DonutChartProps) {
+export default function DonutChart({ title, value, subtitle, percentage, trend }: DonutChartProps) {
   const [mounted, setMounted] = useState(false);
-  // FIX [15]: Stable unique ID for accessibility
-  const chartId = useRef(`donut-${++chartIdCounter}`).current;
+  const chartId = useRef(`donut-${++_idCounter}`).current;
 
   useEffect(() => {
-    // Short rAF delay avoids SSR hydration mismatch while keeping near-instant paint
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
+    const raf = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(raf);
   }, []);
 
-  const clampedPct = Math.min(100, Math.max(0, percentage));
-  const data = [
-    { name: title, value: clampedPct, color: "#48C4C6" },
-    { name: "Remaining", value: 100 - clampedPct, color: "rgba(137,82,165,0.12)" },
-  ];
+  const pct = Math.min(100, Math.max(0, percentage));
+  const data = [{ name: title, value: pct }, { name: "rest", value: 100 - pct }];
+
+  const TrendIcon = trend?.direction === "up" ? TrendingUp : trend?.direction === "down" ? TrendingDown : Minus;
+  const trendColor = trend?.direction === "up" ? "var(--success-text)" : trend?.direction === "down" ? "var(--error-text)" : "var(--text-muted)";
+  const trendBg = trend?.direction === "up" ? "var(--success-surface)" : trend?.direction === "down" ? "var(--error-surface)" : "var(--bg-sunken)";
 
   return (
-    // FIX [21]: canonical --radius-card token via rounded-2xl (consistent with cards)
-    <div
-      className="
-        bg-white dark:bg-pyrexx-darkCard
-        p-3 md:p-5
-        rounded-2xl
-        shadow-card dark:shadow-card-dark
-        flex flex-col items-center justify-center
-        relative w-full
-        aspect-square md:aspect-auto md:min-h-[210px]
-      "
-      role="figure"
-      aria-labelledby={`${chartId}-title`}
-      aria-describedby={`${chartId}-subtitle`}
-    >
-      {/* Title */}
-      <h3
-        id={`${chartId}-title`}
-        className="text-[10px] md:text-xs font-bold text-slate-500 dark:text-slate-400 absolute top-3 left-3 md:top-4 md:left-4 uppercase tracking-wide"
-      >
+    <div className="card flex flex-col items-center p-3 md:p-5 gap-2 md:gap-3 w-full"
+      role="figure" aria-labelledby={`${chartId}-title`} aria-describedby={`${chartId}-sub`}>
+      <p id={`${chartId}-title`}
+        className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-center leading-tight"
+        style={{ color: "var(--text-muted)" }}>
         {title}
-      </h3>
-
-      {/* Chart ring */}
-      <div className="h-[68px] w-[68px] md:h-28 md:w-28 relative mt-5 shrink-0">
+      </p>
+      <div className="relative w-16 h-16 md:w-24 md:h-24 flex-shrink-0">
         {mounted ? (
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                innerRadius="64%"
-                outerRadius="94%"
-                startAngle={90}
-                endAngle={-270}
-                dataKey="value"
-                stroke="none"
-                cornerRadius={6}
-                isAnimationActive={true}
-                animationBegin={0}
-                animationDuration={700}
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
+            <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+              <Pie data={data} innerRadius="60%" outerRadius="90%" startAngle={90} endAngle={-270}
+                dataKey="value" stroke="none" cornerRadius={4} isAnimationActive
+                animationBegin={0} animationDuration={800}>
+                <Cell key="fill" fill="#48C4C6" />
+                <Cell key="rest" fill="var(--bg-sunken)" />
               </Pie>
             </PieChart>
           </ResponsiveContainer>
         ) : (
-          // FIX [9]: Placeholder ring prevents layout shift before Recharts mounts
-          <div className="w-full h-full rounded-full border-4 border-pyrexx-blue/10" />
+          <div className="w-full h-full rounded-full" style={{ border: "4px solid var(--bg-sunken)" }} aria-hidden="true" />
         )}
-
-        {/* Center value */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span
-            className="text-[10px] md:text-xl font-extrabold text-slate-800 dark:text-white tracking-tight leading-none"
-            aria-hidden="true"
-          >
-            {value}
-          </span>
+          <span className="font-extrabold leading-none text-[10px] md:text-lg"
+            style={{ color: "var(--text-primary)" }} aria-hidden="true">{value}</span>
         </div>
       </div>
-
-      {/* FIX [23]: subtitle visible on all screen sizes (removed hidden md:block) */}
-      <p
-        id={`${chartId}-subtitle`}
-        className="mt-3 text-[9px] md:text-xs font-semibold text-pyrexx-purple bg-pyrexx-purple/10 px-2 md:px-3 py-0.5 md:py-1 rounded-full text-center leading-snug"
-      >
+      <p id={`${chartId}-sub`}
+        className="text-[9px] md:text-[10px] font-semibold px-2 md:px-3 py-0.5 md:py-1 rounded-full text-center leading-snug"
+        style={{ background: "var(--purple-surface)", color: "var(--purple-text)" }}>
         {subtitle}
       </p>
+      {trend && (
+        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ background: trendBg }}
+          aria-label={`Trend: ${trend.label}`}>
+          <TrendIcon size={9} style={{ color: trendColor }} aria-hidden="true" />
+          <span className="text-[9px] font-semibold" style={{ color: trendColor }}>{trend.label}</span>
+        </div>
+      )}
     </div>
   );
 }
