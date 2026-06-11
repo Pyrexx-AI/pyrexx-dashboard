@@ -1,544 +1,475 @@
 "use client";
 
 import { useState, useEffect, useId } from "react";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Calendar,
-  MessageSquare,
-  Sun,
-  Moon,
-  Home,
-  Users,
-  PieChart,
-  Mic,
-  Sparkles,
+  Sun, Moon, LayoutDashboard, BarChart3,
+  ChevronRight, CalendarCheck, Sparkles,
+  CheckCircle2, Clock, AlertCircle, CalendarClock,
+  TrendingUp, Zap,
 } from "lucide-react";
 import DonutChart from "./DonutChart";
 import MeetingModal, { Meeting } from "./MeetingModal";
+import ListModal from "./ListModal";
+import LogoMark from "./LogoMark";
 
-/* ─── Animation Variants ─────────────────────────────────────────── */
-const containerVariants: Variants = {
+/* ─── Framer Motion variants ────────────────────────────────────── */
+const containerV = {
   hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08, duration: 0.4, ease: "easeOut" },
-  },
+  show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
+};
+const itemV = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
 };
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 14 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 320, damping: 28 },
-  },
-};
-
-/* ─── Data ───────────────────────────────────────────────────────── */
-const previousMeetings: Meeting[] = [
-  {
-    id: 1,
-    name: "Sarah Jenkins",
-    type: "Botox Consult",
-    time: "Today, 10:00 AM",
-    status: "Completed",
-    transcriptPreview:
-      "Client asked about recovery time for Botox. Handled successfully and booked follow-up.",
-  },
-  {
-    id: 2,
-    name: "Mike Ross",
-    type: "Back Massage",
-    time: "Yesterday, 2:30 PM",
-    status: "Completed",
-    transcriptPreview:
-      "Confirmed 60-minute deep tissue massage. Sent intake forms via SMS.",
-  },
-  {
-    id: 3,
-    name: "Emily Clark",
-    type: "Pricing Inquiry",
-    time: "Yesterday, 4:15 PM",
-    status: "Completed",
-    transcriptPreview:
-      "Provided pricing tier list. Client stated they will call back to schedule.",
-  },
+/* ─── Data ──────────────────────────────────────────────────────── */
+const recentCalls: Meeting[] = [
+  { id: 1, name: "Sarah Jenkins",  type: "Botox Consult",    time: "Today, 10:00 AM",    status: "Completed", transcriptPreview: "Client asked about recovery time. AI explained 24-48h, booked follow-up." },
+  { id: 2, name: "Mike Ross",      type: "Back Massage",     time: "Yesterday, 2:30 PM", status: "Completed", transcriptPreview: "60-min deep tissue confirmed. Intake forms sent via SMS." },
+  { id: 3, name: "Emily Clark",    type: "Pricing Inquiry",  time: "Yesterday, 4:15 PM", status: "Completed", transcriptPreview: "Provided tier pricing. Client will call back to schedule." },
+  { id: 4, name: "Aisha Patel",    type: "LED Therapy",      time: "Mon, 11:20 AM",      status: "Completed", transcriptPreview: "Returning client. AI recognised previous visit and offered loyalty pricing." },
+  { id: 5, name: "James Liu",      type: "General Inquiry",  time: "Mon, 9:45 AM",       status: "Completed", transcriptPreview: "Asked about Hydrafacial availability. Booked for Wednesday." },
 ];
 
-const upcomingMeetings: Meeting[] = [
-  {
-    id: 4,
-    name: "Jessica Alba",
-    type: "Botox Follow-up",
-    time: "Today, 3:00 PM",
-    status: "Scheduled",
-    transcriptPreview:
-      "System automatically fetched this from calendar. Client prefers Dr. Smith.",
-  },
-  {
-    id: 5,
-    name: "David Chen",
-    type: "Consultation",
-    time: "Tomorrow, 9:00 AM",
-    status: "Scheduled",
-    transcriptPreview:
-      "First-time visitor. Ensure digital waiver is completed.",
-  },
-  {
-    id: 6,
-    name: "Amanda Seyfried",
-    type: "Back Massage",
-    time: "Tomorrow, 11:30 AM",
-    status: "Scheduled",
-    transcriptPreview: "Requested firm pressure. Notes added to CRM.",
-  },
+const recentlyBooked: Meeting[] = [
+  { id: 6,  name: "Rachel Green",   type: "Microneedling",  time: "Today, 3:30 PM",    status: "Confirmed", bookedAt: "just now",   transcriptPreview: "New client. AI collected intake info and sent confirmation SMS." },
+  { id: 7,  name: "Tom Harrington", type: "LED Therapy",    time: "Tomorrow, 2:00 PM", status: "Confirmed", bookedAt: "12 min ago", transcriptPreview: "Returning client. AI offered preferred time slot automatically." },
+  { id: 8,  name: "Melissa Ford",   type: "Hydrafacial",    time: "Thu, 10:30 AM",     status: "Confirmed", bookedAt: "38 min ago", transcriptPreview: "First appointment. Digital waiver sent." },
+  { id: 9,  name: "Carla Mendez",   type: "Botox Follow-up",time: "Fri, 9:00 AM",      status: "Confirmed", bookedAt: "1 hr ago",   transcriptPreview: "Post-treatment check. Upsell to maintenance plan offered." },
+  { id: 10, name: "Daniel Park",    type: "Consultation",   time: "Sat, 11:00 AM",     status: "Confirmed", bookedAt: "2 hrs ago",  transcriptPreview: "First-time visitor seeking full-face assessment." },
 ];
 
-/* ─── Sub-components ─────────────────────────────────────────────── */
+const upcomingBookings: Meeting[] = [
+  { id: 11, name: "Jessica Alba",    type: "Botox Follow-up", time: "Today, 3:00 PM",    status: "Scheduled", transcriptPreview: "Prefers Dr. Smith. VIP note added to CRM." },
+  { id: 12, name: "David Chen",      type: "Consultation",    time: "Tomorrow, 9:00 AM", status: "Scheduled", transcriptPreview: "First visit. Waiver must be completed before arrival." },
+  { id: 13, name: "Amanda Seyfried", type: "Back Massage",    time: "Tomorrow, 11:30 AM",status: "Scheduled", transcriptPreview: "Requested firm pressure. Notes in CRM." },
+  { id: 14, name: "Kevin Okafor",    type: "Skin Analysis",   time: "Wed, 1:00 PM",      status: "Scheduled", transcriptPreview: "Interested in long-term skincare plan." },
+  { id: 15, name: "Nina Wolff",      type: "Chemical Peel",   time: "Thu, 10:00 AM",     status: "Scheduled", transcriptPreview: "Patch test completed. Green-listed for treatment." },
+];
 
-// Shared "coming soon" panel for unbuilt tabs
-function ComingSoonPanel({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-}) {
+/* ─── Helpers ───────────────────────────────────────────────────── */
+function statusStyle(status: string) {
+  switch (status) {
+    case "Completed": return { bg: "var(--success-surface)", color: "var(--success-text)", Icon: CheckCircle2 };
+    case "Scheduled": return { bg: "var(--purple-surface)",  color: "var(--purple-text)",  Icon: CalendarClock };
+    case "Confirmed": return { bg: "var(--teal-surface)",    color: "var(--teal-text)",    Icon: CheckCircle2 };
+    default:          return { bg: "var(--warning-surface)", color: "var(--warning-text)", Icon: AlertCircle };
+  }
+}
+
+/* ─── MeetingRow — used inside ListCards ────────────────────────── */
+function MeetingRow({ meeting, onSelect }: { meeting: Meeting; onSelect: (m: Meeting) => void }) {
+  const { bg, color, Icon } = statusStyle(meeting.status);
   return (
-    <motion.div
-      variants={itemVariants}
-      className="flex flex-col items-center justify-center py-24 px-6 text-center"
+    <button
+      type="button"
+      onClick={() => onSelect(meeting)}
+      aria-label={`View ${meeting.name} — ${meeting.type}`}
+      className="w-full text-left flex items-center gap-3 px-1 py-2.5 rounded-xl cursor-pointer group transition-colors"
+      style={{ borderBottom: "1px solid var(--border-subtle)" }}
+      onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")}
+      onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <div className="w-16 h-16 rounded-2xl bg-pyrexx-blue/10 dark:bg-pyrexx-blue/20 flex items-center justify-center mb-5">
-        <Icon className="text-pyrexx-blue" size={28} aria-hidden="true" />
+      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+        <Icon size={12} style={{ color }} aria-hidden="true" />
       </div>
-      <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-2">
-        {title}
-      </h2>
-      <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed">
-        {description}
-      </p>
-      <span className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-pyrexx-purple bg-pyrexx-purple/10 px-3 py-1.5 rounded-full">
-        <Sparkles size={12} aria-hidden="true" /> Coming Soon
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{meeting.name}</p>
+        <p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>
+          {meeting.type}
+          {meeting.bookedAt
+            ? <span style={{ color: "var(--teal-text)" }}> · {meeting.bookedAt}</span>
+            : <span> · {meeting.time}</span>
+          }
+        </p>
+      </div>
+      <ChevronRight size={12} className="flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity"
+        style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+    </button>
+  );
+}
+
+/* ─── ListCard ──────────────────────────────────────────────────── */
+interface ListCardProps {
+  title: string;
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  meetings: Meeting[];
+  onSelectMeeting: (m: Meeting) => void;
+  onViewAll: () => void;
+}
+function ListCard({ title, icon: Icon, iconBg, iconColor, meetings, onSelectMeeting, onViewAll }: ListCardProps) {
+  const preview = meetings.slice(0, 3);
+  return (
+    <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
+            <Icon size={14} style={{ color: iconColor }} aria-hidden="true" />
+          </div>
+          <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onViewAll}
+          aria-label={`View all ${title}`}
+          className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer transition-colors rounded-lg px-2 py-1"
+          style={{ color: iconColor, background: iconBg }}
+          onMouseOver={(e) => (e.currentTarget.style.opacity = "0.75")}
+          onMouseOut={(e) => (e.currentTarget.style.opacity = "1")}
+        >
+          View all <ChevronRight size={11} aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* 3-item preview — NOT scrollable (user navigates screen freely) */}
+      <div role="list" className="flex flex-col">
+        {preview.map((m) => (
+          <MeetingRow key={m.id} meeting={m} onSelect={onSelectMeeting} />
+        ))}
+      </div>
+    </motion.section>
+  );
+}
+
+/* ─── InsightsCard ──────────────────────────────────────────────── */
+function InsightsCard() {
+  const intents = [
+    { label: "Botox / Injectables", pct: 45, color: "var(--teal)" },
+    { label: "Massage & Body",       pct: 28, color: "var(--purple)" },
+    { label: "Facials & Skin",       pct: 18, color: "#60A5FA" },
+    { label: "General Inquiries",    pct: 9,  color: "#F59E0B" },
+  ];
+  return (
+    <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
+          <Zap size={14} style={{ color: "var(--teal)" }} aria-hidden="true" />
+        </div>
+        <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Call Intents</h2>
+      </div>
+
+      {/* Stacked bar */}
+      <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img" aria-label="Intent distribution bar">
+        {intents.map((i) => (
+          <div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />
+        ))}
+      </div>
+
+      {/* Legend rows */}
+      <ul className="space-y-2.5" role="list">
+        {intents.map((i) => (
+          <li key={i.label}>
+            <div className="flex justify-between items-center mb-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i.color }} aria-hidden="true" />
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{i.label}</span>
+              </div>
+              <span className="text-xs font-bold" style={{ color: i.color }}>{i.pct}%</span>
+            </div>
+            <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
+              role="progressbar" aria-valuenow={i.pct} aria-valuemin={0} aria-valuemax={100}
+              aria-label={`${i.label}: ${i.pct}%`}>
+              <motion.div className="h-full rounded-full"
+                style={{ background: i.color }}
+                initial={{ width: 0 }}
+                animate={{ width: `${i.pct}%` }}
+                transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </motion.section>
+  );
+}
+
+/* ─── OutcomesCard ──────────────────────────────────────────────── */
+function OutcomesCard() {
+  const outcomes = [
+    { label: "Appointment Booked",  count: 38, Icon: CheckCircle2, bg: "var(--success-surface)", color: "var(--success-text)" },
+    { label: "Callback Requested",  count: 12, Icon: Clock,        bg: "var(--warning-surface)", color: "var(--warning-text)" },
+    { label: "Escalated to Staff",  count: 4,  Icon: AlertCircle,  bg: "var(--info-surface)",    color: "var(--info-text)" },
+  ];
+  const total = outcomes.reduce((s, o) => s + o.count, 0);
+  return (
+    <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--purple-surface)" }}>
+          <TrendingUp size={14} style={{ color: "var(--purple)" }} aria-hidden="true" />
+        </div>
+        <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Outcomes</h2>
+        <span className="ml-auto text-xs font-semibold badge"
+          style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}>
+          {total} today
+        </span>
+      </div>
+      <ul className="space-y-3" role="list">
+        {outcomes.map(({ label, count, Icon, bg, color }) => {
+          const pct = Math.round((count / total) * 100);
+          return (
+            <li key={label} className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+                <Icon size={14} style={{ color }} aria-hidden="true" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
+                  <span className="text-xs font-bold" style={{ color }}>{count}</span>
+                </div>
+                <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
+                  role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+                  <motion.div className="h-full rounded-full" style={{ background: color }}
+                    initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+                    transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }} />
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </motion.section>
+  );
+}
+
+/* ─── ComingSoon ────────────────────────────────────────────────── */
+function ComingSoon({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
+  return (
+    <motion.div variants={itemV} className="flex flex-col items-center justify-center py-24 px-6 text-center">
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
+        style={{ background: "var(--teal-surface)" }}>
+        <Icon size={28} style={{ color: "var(--teal)" }} aria-hidden="true" />
+      </div>
+      <h2 className="text-xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>{title}</h2>
+      <p className="text-sm max-w-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>{description}</p>
+      <span className="mt-5 badge text-xs" style={{ background: "var(--purple-surface)", color: "var(--purple-text)" }}>
+        <Sparkles size={11} aria-hidden="true" /> Coming Soon
       </span>
     </motion.div>
   );
 }
 
-/* ─── Meeting Card ───────────────────────────────────────────────── */
-function MeetingCard({
-  meeting,
-  variant,
-  onSelect,
-}: {
-  meeting: Meeting;
-  variant: "previous" | "upcoming";
-  onSelect: (m: Meeting) => void;
-}) {
-  // FIX [14]: Descriptive screen-reader label instead of generic "View"
-  const label = `View details for ${meeting.name} — ${meeting.type}`;
-  const badgeText = variant === "previous" ? meeting.type : meeting.time;
-  const hoverClass =
-    variant === "previous"
-      ? "hover:bg-pyrexx-blue/8 dark:hover:bg-pyrexx-blue/20"
-      : "hover:bg-pyrexx-purple/8 dark:hover:bg-pyrexx-purple/20";
-  const activeBadgeHover =
-    variant === "previous"
-      ? "group-hover:bg-pyrexx-blue group-hover:text-white"
-      : "group-hover:bg-pyrexx-purple group-hover:text-white";
-  const badgeColor =
-    variant === "previous" ? "text-pyrexx-purple" : "text-pyrexx-blue";
-
+/* ─── Dashboard Panel ───────────────────────────────────────────── */
+type ModalKey = "recent" | "booked" | "upcoming" | null;
+function DashboardPanel({ onSelectMeeting }: { onSelectMeeting: (m: Meeting) => void }) {
+  const [openList, setOpenList] = useState<ModalKey>(null);
   return (
-    <button
-      type="button" // FIX [13]
-      onClick={() => onSelect(meeting)}
-      aria-label={label} // FIX [14]
-      className={`
-        w-full text-left cursor-pointer
-        bg-slate-50 dark:bg-pyrexx-surface
-        ${hoverClass}
-        transition-colors p-4 rounded-[0.875rem] group
-        border border-transparent dark:border-pyrexx-purple/15
-        focus-visible:outline-2 focus-visible:outline-pyrexx-blue
-      `}
-    >
-      <div className="flex justify-between items-center gap-2">
-        <div className="min-w-0">
-          <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
-            {meeting.name}
-          </h4>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-            {badgeText}
-          </p>
-        </div>
-        <span
-          aria-hidden="true"
-          className={`
-            shrink-0 text-[10px] font-bold ${badgeColor}
-            bg-white dark:bg-pyrexx-darkBg
-            px-3 py-1.5 rounded-full shadow-sm
-            ${activeBadgeHover} transition-colors
-          `}
-        >
-          {variant === "previous" ? "View" : "Details"}
-        </span>
+    <>
+      {/* KPI row */}
+      <motion.div variants={itemV} className="grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-5">
+        <DonutChart title="Pickup Rate"  value="98.5%" percentage={98.5} subtitle="+2.1% vs last wk"
+          trend={{ direction: "up", label: "2.1%" }} />
+        <DonutChart title="Conversion"  value="42.3%" percentage={42.3} subtitle="+5.4% vs last wk"
+          trend={{ direction: "up", label: "5.4%" }} />
+        <DonutChart title="Total Calls" value="1,245"  percentage={75}   subtitle="245 this week"
+          trend={{ direction: "up", label: "12%" }} />
+      </motion.div>
+
+      {/* Three activity cards — Recent · Booked · Upcoming */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-4 mb-4 md:mb-5">
+        <ListCard title="Recent Calls"
+          icon={CalendarCheck} iconBg="var(--teal-surface)" iconColor="var(--teal-text)"
+          meetings={recentCalls} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("recent")} />
+        <ListCard title="Recently Booked"
+          icon={Sparkles} iconBg="var(--purple-surface)" iconColor="var(--purple-text)"
+          meetings={recentlyBooked} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("booked")} />
+        <ListCard title="Upcoming"
+          icon={CalendarClock} iconBg="var(--info-surface)" iconColor="var(--info-text)"
+          meetings={upcomingBookings} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("upcoming")} />
       </div>
-    </button>
+
+      {/* Insights row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InsightsCard />
+        <OutcomesCard />
+      </div>
+
+      {/* List modals */}
+      <ListModal isOpen={openList === "recent"}   onClose={() => setOpenList(null)}
+        title="Recent Calls" subtitle="All completed AI calls"
+        meetings={recentCalls} onSelectMeeting={onSelectMeeting} variant="recent" />
+      <ListModal isOpen={openList === "booked"}   onClose={() => setOpenList(null)}
+        title="Recently Booked" subtitle="Bookings captured by AI"
+        meetings={recentlyBooked} onSelectMeeting={onSelectMeeting} variant="booked" />
+      <ListModal isOpen={openList === "upcoming"} onClose={() => setOpenList(null)}
+        title="Upcoming Appointments" subtitle="Scheduled via AI receptionist"
+        meetings={upcomingBookings} onSelectMeeting={onSelectMeeting} variant="upcoming" />
+    </>
   );
 }
 
-/* ─── Main Component ─────────────────────────────────────────────── */
-type TabId = "dashboard" | "transcripts" | "analytics" | "crm";
+/* ─── Main Component ────────────────────────────────────────────── */
+type TabId = "dashboard" | "analytics";
+const TABS: { id: TabId; icon: React.ElementType; label: string }[] = [
+  { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { id: "analytics", icon: BarChart3,       label: "Analytics"  },
+];
 
 export default function DashboardHome() {
-  // FIX [18]: Proper type instead of any
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
-
-  // FIX [5] + [20]: Read from localStorage on init (anti-flash script in layout
-  // has already set the class; this state just keeps React in sync)
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return document.documentElement.classList.contains("dark");
-  });
-
-  // Sync <html> class + persist on toggle
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDarkMode) {
-      root.classList.add("dark");
-      localStorage.setItem("pyrexx-theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("pyrexx-theme", "light");
-    }
-  }, [isDarkMode]);
-
+  const [activeTab, setActiveTab]       = useState<TabId>("dashboard");
+  const [selectedMeeting, setSelected]  = useState<Meeting | null>(null);
+  const [isDark, setIsDark]             = useState(() =>
+    typeof window !== "undefined"
+      ? document.documentElement.classList.contains("dark")
+      : false
+  );
   const tabPanelId = useId();
 
-  const tabs: { id: TabId; icon: React.ElementType; label: string }[] = [
-    { id: "dashboard", icon: Home, label: "Dashboard" },
-    { id: "transcripts", icon: MessageSquare, label: "Transcripts" },
-    { id: "analytics", icon: PieChart, label: "Analytics" },
-    { id: "crm", icon: Users, label: "CRM" },
-  ];
-
-  /* ─── Render active tab panel ─────────────────────────────────── */
-  const renderPanel = () => {
-    // FIX [16]: All tabs show meaningful content instead of nothing
-    switch (activeTab) {
-      case "dashboard":
-        return <DashboardPanel onSelectMeeting={setSelectedMeeting} />;
-      case "transcripts":
-        return (
-          <ComingSoonPanel
-            icon={Mic}
-            title="Call Transcripts"
-            description="Full AI-generated transcripts of every patient call will appear here, searchable by name, date, or intent."
-          />
-        );
-      case "analytics":
-        return (
-          <ComingSoonPanel
-            icon={PieChart}
-            title="Analytics"
-            description="Deep performance analytics — conversion funnels, call intent trends, response time distributions, and revenue attribution."
-          />
-        );
-      case "crm":
-        return (
-          <ComingSoonPanel
-            icon={Users}
-            title="Patient CRM"
-            description="Unified patient records, call history, booking preferences, and follow-up pipeline — connected to your AI receptionist."
-          />
-        );
-    }
-  };
+  /* Persist theme */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) { root.classList.add("dark");    localStorage.setItem("pyrexx-theme", "dark");  }
+    else        { root.classList.remove("dark"); localStorage.setItem("pyrexx-theme", "light"); }
+  }, [isDark]);
 
   return (
-    <div className="min-h-screen bg-background font-sans">
-      {/* ─── Header ─────────────────────────────────────────────── */}
+    <div className="min-h-screen font-sans dashboard-bg">
+      {/* ── Header ────────────────────────────────────────────── */}
       <motion.header
-        className="flex justify-between items-center px-4 md:px-8 pt-5 md:pt-7 pb-2"
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
+        className="sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 flex items-center gap-3"
+        style={{
+          background: isDark
+            ? "rgba(13,8,24,0.80)"
+            : "rgba(244,246,255,0.80)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: "1px solid var(--border-subtle)",
+        }}
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
       >
-        <motion.div variants={itemVariants}>
-          <h1 className="text-2xl md:text-4xl font-extrabold text-slate-800 dark:text-white tracking-tight">
-            <span className="text-pyrexx-blue">Pyrexx</span> AI
-          </h1>
-          <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-            AI Receptionist performance
-          </p>
-        </motion.div>
-
-        <motion.div variants={itemVariants} className="flex items-center gap-2 md:gap-3">
-          {/* FIX [17]: Promo visible on mobile too — compact chip variant */}
-          <div className="flex bg-white dark:bg-pyrexx-darkCard shadow-card dark:shadow-card-dark rounded-full items-center gap-1.5 border border-slate-100 dark:border-pyrexx-purple/20 px-3 py-1.5 md:px-5 md:py-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-pyrexx-blue animate-pulse shrink-0" aria-hidden="true" />
-            {/* Full promo text on md+, compact on mobile */}
-            <p className="text-[10px] md:text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-              <span className="hidden md:inline">Setup: </span>
-              <span className="line-through text-slate-400 font-normal">$1k</span>
-              <span className="text-pyrexx-purple ml-1 font-bold">$500</span>
+        {/* Logo + wordmark */}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <LogoMark size={36} />
+          <div>
+            <h1 className="text-base md:text-lg font-extrabold leading-tight tracking-tight"
+              style={{ color: "var(--text-primary)" }}>
+              <span style={{ color: "var(--teal)" }}>Pyrexx</span> AI
+            </h1>
+            <p className="text-[10px] hidden sm:block font-medium leading-tight"
+              style={{ color: "var(--text-muted)" }}>
+              AI Receptionist
             </p>
           </div>
+        </div>
 
-          {/* FIX [10] [25]: aria-label + cursor-pointer on theme toggle */}
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Promo chip — visible all sizes */}
+        <div
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full flex-shrink-0"
+          style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", boxShadow: "var(--shadow-xs)" }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse" style={{ background: "var(--teal)" }} aria-hidden="true" />
+          <p className="text-[10px] md:text-xs font-semibold whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
+            Setup: <span className="line-through" style={{ color: "var(--text-muted)", fontWeight: 400 }}>$1k</span>{" "}
+            <span style={{ color: "var(--purple)", fontWeight: 700 }}>$500</span>
+          </p>
+        </div>
+
+        {/* Theme toggle — sun/moon pill with depression effect */}
+        <div className="theme-toggle-pill flex-shrink-0" role="group" aria-label="Color theme">
           <button
             type="button"
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-            aria-pressed={isDarkMode}
-            className="
-              flex items-center justify-center w-9 h-9 md:w-10 md:h-10
-              rounded-full cursor-pointer
-              bg-white dark:bg-pyrexx-darkCard
-              shadow-card dark:shadow-card-dark
-              border border-slate-100 dark:border-pyrexx-purple/30
-              text-slate-600 dark:text-pyrexx-blue
-              hover:scale-105 active:scale-95
-              transition-transform
-            "
+            onClick={() => setIsDark(false)}
+            aria-label="Light mode"
+            aria-pressed={!isDark}
+            className={`theme-toggle-btn${!isDark ? " active" : ""}`}
           >
-            {isDarkMode ? (
-              <Sun size={17} aria-hidden="true" />
-            ) : (
-              <Moon size={17} aria-hidden="true" />
-            )}
+            <Sun size={14} aria-hidden="true" />
+            <span className="hidden sm:inline">Light</span>
           </button>
-        </motion.div>
+          <button
+            type="button"
+            onClick={() => setIsDark(true)}
+            aria-label="Dark mode"
+            aria-pressed={isDark}
+            className={`theme-toggle-btn${isDark ? " active" : ""}`}
+          >
+            <Moon size={14} aria-hidden="true" />
+            <span className="hidden sm:inline">Dark</span>
+          </button>
+        </div>
       </motion.header>
 
-      {/* ─── Tab Panel ──────────────────────────────────────────── */}
-      <motion.main
+      {/* ── Tab panel ─────────────────────────────────────────── */}
+      <main
         id={`${tabPanelId}-panel`}
-        className="px-4 md:px-8 pt-4 pb-28 md:pb-32"
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        key={activeTab} // re-animate on tab switch
+        className="px-4 md:px-8 pt-5 pb-28"
+        aria-live="polite"
       >
         <AnimatePresence mode="wait">
-          {renderPanel()}
+          <motion.div
+            key={activeTab}
+            variants={containerV}
+            initial="hidden"
+            animate="show"
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+          >
+            {activeTab === "dashboard" ? (
+              <DashboardPanel onSelectMeeting={setSelected} />
+            ) : (
+              <ComingSoon
+                icon={BarChart3}
+                title="Analytics"
+                description="Deep performance analytics — conversion funnels, intent trends, response-time distributions, and revenue attribution."
+              />
+            )}
+          </motion.div>
         </AnimatePresence>
-      </motion.main>
+      </main>
 
-      {/* ─── Bottom Nav ─────────────────────────────────────────── */}
+      {/* ── Bottom Nav — 2 items ───────────────────────────────── */}
       <motion.nav
         aria-label="Main navigation"
-        className="
-          fixed bottom-5 md:bottom-8 left-1/2 -translate-x-1/2 z-40
-          flex items-center gap-1 p-1.5
-          bg-white/80 dark:bg-pyrexx-darkCard/85
-          backdrop-blur-xl
-          border border-slate-200/80 dark:border-pyrexx-purple/25
-          shadow-float
-          rounded-full
-        "
+        role="tablist"
+        className="fixed bottom-5 md:bottom-8 left-1/2 -translate-x-1/2 z-40 flex items-center p-1.5 gap-1"
+        style={{
+          background: isDark ? "rgba(22,11,36,0.88)" : "rgba(255,255,255,0.88)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          border: "1px solid var(--border-medium)",
+          borderRadius: "9999px",
+          boxShadow: "var(--shadow-lg)",
+        }}
         initial={{ y: 48, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.4, type: "spring", damping: 22 }}
-        // FIX [11]: tablist role for keyboard nav pattern
-        role="tablist"
+        transition={{ delay: 0.45, type: "spring", damping: 22 }}
       >
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          const Icon = tab.icon;
+        {TABS.map(({ id, icon: Icon, label }) => {
+          const isActive = activeTab === id;
           return (
             <button
-              key={tab.id}
+              key={id}
               type="button"
               role="tab"
               aria-selected={isActive}
               aria-controls={`${tabPanelId}-panel`}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                flex items-center gap-1.5 cursor-pointer
-                rounded-full text-xs font-semibold
-                transition-all duration-250
-                ${isActive
-                  ? "px-4 py-2.5 bg-pyrexx-blue text-white shadow-md"
-                  : "px-3 py-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-pyrexx-purple/20"
-                }
-              `}
+              onClick={() => setActiveTab(id)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-200"
+              style={
+                isActive
+                  ? { background: "var(--teal)", color: "#fff", boxShadow: "0 2px 8px rgba(72,196,198,0.35)" }
+                  : { color: "var(--text-muted)", background: "transparent" }
+              }
             >
-              <Icon size={16} aria-hidden="true" />
-              {/* FIX [19]: Always show label — no hidden-unless-active on mobile */}
-              <span className="hidden sm:block">{tab.label}</span>
-              {/* On xs screens, show a tiny label when active only for space */}
-              {isActive && <span className="sm:hidden">{tab.label}</span>}
+              <Icon size={15} aria-hidden="true" />
+              {label}
             </button>
           );
         })}
       </motion.nav>
 
-      {/* ─── Meeting Modal ───────────────────────────────────────── */}
+      {/* ── Meeting detail modal ───────────────────────────────── */}
       <MeetingModal
         isOpen={!!selectedMeeting}
-        onClose={() => setSelectedMeeting(null)}
+        onClose={() => setSelected(null)}
         meeting={selectedMeeting}
       />
     </div>
-  );
-}
-
-/* ─── Dashboard Panel (extracted to keep DashboardHome readable) ── */
-function DashboardPanel({
-  onSelectMeeting,
-}: {
-  onSelectMeeting: (m: Meeting) => void;
-}) {
-  return (
-    <>
-      {/* Donut Row */}
-      <motion.div
-        variants={itemVariants}
-        className="grid grid-cols-3 gap-2 md:gap-5 mb-4 md:mb-6"
-      >
-        <DonutChart
-          title="Pickup Rate"
-          value="98.5%"
-          percentage={98.5}
-          subtitle="+2.1% this week"
-        />
-        <DonutChart
-          title="Conversion"
-          value="42.3%"
-          percentage={42.3}
-          subtitle="+5.4% this week"
-        />
-        <DonutChart
-          title="Total Calls"
-          value="1,245"
-          percentage={75}
-          subtitle="Calls logged"
-        />
-      </motion.div>
-
-      {/* Main Grid */}
-      {/* FIX [24]: Consistent card info — both cols show name + type + time */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5 items-stretch">
-        {/* Col 1: Previous Meetings */}
-        <motion.section
-          variants={itemVariants}
-          aria-labelledby="prev-meetings-heading"
-          className="bg-card dark:bg-pyrexx-darkCard p-4 md:p-6 rounded-2xl shadow-card dark:shadow-card-dark flex flex-col"
-        >
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="p-2 bg-pyrexx-blue/10 dark:bg-pyrexx-blue/20 rounded-xl">
-              <Calendar className="text-pyrexx-blue" size={16} aria-hidden="true" />
-            </div>
-            <h2 id="prev-meetings-heading" className="text-base font-bold text-slate-800 dark:text-white">
-              Recent Calls
-            </h2>
-          </div>
-          <div className="space-y-2.5 flex-1">
-            {previousMeetings.map((m) => (
-              <MeetingCard key={m.id} meeting={m} variant="previous" onSelect={onSelectMeeting} />
-            ))}
-          </div>
-        </motion.section>
-
-        {/* Col 2: Middle stacked cards */}
-        <motion.div variants={itemVariants} className="flex flex-col gap-4 md:gap-5">
-          {/* Call Intents */}
-          <section
-            aria-labelledby="intents-heading"
-            className="bg-card dark:bg-pyrexx-darkCard p-4 md:p-6 rounded-2xl shadow-card dark:shadow-card-dark flex-1 flex flex-col"
-          >
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="p-2 bg-pyrexx-purple/10 dark:bg-pyrexx-purple/20 rounded-xl">
-                <MessageSquare className="text-pyrexx-purple" size={16} aria-hidden="true" />
-              </div>
-              <h2 id="intents-heading" className="text-base font-bold text-slate-800 dark:text-white">
-                Call Intents
-              </h2>
-            </div>
-            <ul className="space-y-3 text-sm flex-1" role="list">
-              {[
-                { label: "Botox Consultations", val: "45%", pct: 45 },
-                { label: "Back Massages", val: "35%", pct: 35 },
-                { label: "General Inquiries", val: "20%", pct: 20 },
-              ].map((intent) => (
-                <li key={intent.label}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-slate-600 dark:text-slate-300 font-medium text-xs">{intent.label}</span>
-                    <span className="text-pyrexx-blue font-bold text-xs">{intent.val}</span>
-                  </div>
-                  {/* Progress bar — visual + accessible */}
-                  <div
-                    className="h-1 bg-slate-100 dark:bg-pyrexx-purple/15 rounded-full overflow-hidden"
-                    role="progressbar"
-                    aria-valuenow={intent.pct}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${intent.label}: ${intent.val}`}
-                  >
-                    <div
-                      className="h-full bg-pyrexx-blue rounded-full transition-all"
-                      style={{ width: intent.val }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Recent Outcomes */}
-          <section
-            aria-labelledby="outcomes-heading"
-            className="bg-card dark:bg-pyrexx-darkCard p-4 md:p-6 rounded-2xl shadow-card dark:shadow-card-dark flex-1 flex flex-col"
-          >
-            <h2 id="outcomes-heading" className="text-base font-bold text-slate-800 dark:text-white mb-4">
-              Recent Outcomes
-            </h2>
-            <ul className="space-y-3 flex-1" role="list">
-              {[
-                { title: "Appointment Booked", icon: CheckCircle, color: "text-pyrexx-blue", bg: "bg-pyrexx-blue/10 dark:bg-pyrexx-blue/20" },
-                { title: "Callback Requested", icon: Clock, color: "text-slate-400", bg: "bg-slate-100 dark:bg-slate-700/30" },
-                { title: "Escalated to Staff", icon: AlertCircle, color: "text-pyrexx-purple", bg: "bg-pyrexx-purple/10 dark:bg-pyrexx-purple/20" },
-              ].map((outcome) => (
-                <li key={outcome.title} className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg ${outcome.bg} shrink-0`}>
-                    <outcome.icon className={outcome.color} size={14} aria-hidden="true" />
-                  </div>
-                  <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">{outcome.title}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </motion.div>
-
-        {/* Col 3: Upcoming Meetings */}
-        <motion.section
-          variants={itemVariants}
-          aria-labelledby="next-meetings-heading"
-          className="bg-card dark:bg-pyrexx-darkCard p-4 md:p-6 rounded-2xl shadow-card dark:shadow-card-dark flex flex-col"
-        >
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="p-2 bg-pyrexx-blue/10 dark:bg-pyrexx-blue/20 rounded-xl">
-              <Calendar className="text-pyrexx-blue" size={16} aria-hidden="true" />
-            </div>
-            <h2 id="next-meetings-heading" className="text-base font-bold text-slate-800 dark:text-white">
-              Upcoming
-            </h2>
-          </div>
-          <div className="space-y-2.5 flex-1">
-            {upcomingMeetings.map((m) => (
-              <MeetingCard key={m.id} meeting={m} variant="upcoming" onSelect={onSelectMeeting} />
-            ))}
-          </div>
-        </motion.section>
-      </div>
-    </>
   );
 }
