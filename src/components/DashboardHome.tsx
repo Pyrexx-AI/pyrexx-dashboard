@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useId } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Sun, Moon, LayoutDashboard, BarChart3,
   ChevronRight, CalendarCheck, Sparkles,
@@ -14,11 +14,18 @@ import ListModal from "./ListModal";
 import LogoMark from "./LogoMark";
 
 /* ─── Framer Motion variants ────────────────────────────────────── */
-const containerV = {
+/*
+  FIX: Explicit `Variants` type annotation.
+  Without it, TS widens `type: "spring"` to `string` and `ease: "easeOut"`
+  to `string`, which is incompatible with Framer Motion's `Transition`
+  union types (AnimationGeneratorType, Easing, etc.) — causing the
+  build-time type error on `variants={itemV}`.
+*/
+const containerV: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
 };
-const itemV = {
+const itemV: Variants = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
 };
