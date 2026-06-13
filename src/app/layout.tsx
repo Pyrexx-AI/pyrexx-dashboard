@@ -15,6 +15,12 @@ export const metadata: Metadata = {
   description:
     "Monitor your AI receptionist performance — call pickup rates, bookings, transcripts, and more.",
   robots: { index: false, follow: false }, // Private dashboard — keep off search
+  // FIX: Use the real Pyrexx mark as favicon / app icon (was missing entirely before)
+  icons: {
+    icon: "/PyrexxAI_logo.png",
+    shortcut: "/PyrexxAI_logo.png",
+    apple: "/PyrexxAI_logo.png",
+  },
 };
 
 // FIX: Explicit viewport export (Next.js 14+ best practice; ensures no zoom disable)
