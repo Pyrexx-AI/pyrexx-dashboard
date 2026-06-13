@@ -17,11 +17,11 @@ import LogoMark from "./LogoMark";
 const containerV = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
-};
+} as const ;
 const itemV = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
-};
+} as const ;
 
 /* ─── Data ──────────────────────────────────────────────────────── */
 const recentCalls: Meeting[] = [
