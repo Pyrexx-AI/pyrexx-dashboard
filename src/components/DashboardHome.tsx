@@ -1,12 +1,12 @@
-"use client";
+""use client";
 
 import { useState, useEffect, useId } from "react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Sun, Moon, LayoutDashboard, BarChart3,
   ChevronRight, CalendarCheck, Sparkles,
   CheckCircle2, Clock, AlertCircle, CalendarClock,
-  TrendingUp, Zap,
+  TrendingUp, Zap, UserCircle2,
 } from "lucide-react";
 import DonutChart from "./DonutChart";
 import MeetingModal, { Meeting } from "./MeetingModal";
@@ -14,18 +14,11 @@ import ListModal from "./ListModal";
 import LogoMark from "./LogoMark";
 
 /* ─── Framer Motion variants ────────────────────────────────────── */
-/*
-  FIX: Explicit `Variants` type annotation.
-  Without it, TS widens `type: "spring"` to `string` and `ease: "easeOut"`
-  to `string`, which is incompatible with Framer Motion's `Transition`
-  union types (AnimationGeneratorType, Easing, etc.) — causing the
-  build-time type error on `variants={itemV}`.
-*/
-const containerV: Variants = {
+const containerV = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
 };
-const itemV: Variants = {
+const itemV = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
 };
@@ -308,10 +301,11 @@ function DashboardPanel({ onSelectMeeting }: { onSelectMeeting: (m: Meeting) => 
 }
 
 /* ─── Main Component ────────────────────────────────────────────── */
-type TabId = "dashboard" | "analytics";
+type TabId = "dashboard" | "analytics" | "profile";
 const TABS: { id: TabId; icon: React.ElementType; label: string }[] = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { id: "analytics", icon: BarChart3,       label: "Analytics"  },
+  { id: "profile",   icon: UserCircle2,     label: "Profile"   },
 ];
 
 export default function DashboardHome() {
@@ -366,18 +360,6 @@ export default function DashboardHome() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Promo chip — visible all sizes */}
-        <div
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full flex-shrink-0"
-          style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", boxShadow: "var(--shadow-xs)" }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse" style={{ background: "var(--teal)" }} aria-hidden="true" />
-          <p className="text-[10px] md:text-xs font-semibold whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
-            Setup: <span className="line-through" style={{ color: "var(--text-muted)", fontWeight: 400 }}>$1k</span>{" "}
-            <span style={{ color: "var(--purple)", fontWeight: 700 }}>$500</span>
-          </p>
-        </div>
-
         {/* Theme toggle — sun/moon pill with depression effect */}
         <div className="theme-toggle-pill flex-shrink-0" role="group" aria-label="Color theme">
           <button
@@ -419,18 +401,24 @@ export default function DashboardHome() {
           >
             {activeTab === "dashboard" ? (
               <DashboardPanel onSelectMeeting={setSelected} />
-            ) : (
+            ) : activeTab === "analytics" ? (
               <ComingSoon
                 icon={BarChart3}
                 title="Analytics"
                 description="Deep performance analytics — conversion funnels, intent trends, response-time distributions, and revenue attribution."
+              />
+            ) : (
+              <ComingSoon
+                icon={UserCircle2}
+                title="Profile"
+                description="Manage your clinic profile, AI receptionist settings, team access, and notification preferences."
               />
             )}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      {/* ── Bottom Nav — 2 items ───────────────────────────────── */}
+      {/* ── Bottom Nav — 3 items (Dashboard · Analytics · Profile) ── */}
       <motion.nav
         aria-label="Main navigation"
         role="tablist"
@@ -457,7 +445,8 @@ export default function DashboardHome() {
               aria-selected={isActive}
               aria-controls={`${tabPanelId}-panel`}
               onClick={() => setActiveTab(id)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-200"
+              aria-label={label}
+              className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-200"
               style={
                 isActive
                   ? { background: "var(--teal)", color: "#fff", boxShadow: "0 2px 8px rgba(72,196,198,0.35)" }
@@ -465,7 +454,7 @@ export default function DashboardHome() {
               }
             >
               <Icon size={15} aria-hidden="true" />
-              {label}
+              <span className="hidden sm:inline">{label}</span>
             </button>
           );
         })}
