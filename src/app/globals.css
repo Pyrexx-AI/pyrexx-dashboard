@@ -52,50 +52,69 @@
   --toggle-active-fg: #F59E0B;  /* sun amber */
   --toggle-inactive-fg: #94A3B8;
 
+  /* Loading-animation logo colors — sampled from the official mark.
+     Outline = dark charcoal (matches the real logo on light surfaces).
+     Gap = the white/cream cutout color between ribbons. */
+  --logo-outline: #211C2E;
+  --logo-gap:     #FFFFFF;
+
   color-scheme: light;
 }
 
 /* Dark mode */
+/*
+  REDESIGNED — previous dark theme (#0D0818 base / #160B24 cards) read
+  as near-black and crushed contrast between surfaces. New palette is
+  a lighter "midnight slate-purple": surfaces sit ~8-10% lighter, with
+  more visible borders and brighter secondary text, while keeping the
+  same brand-purple undertone.
+*/
 html.dark {
-  --bg-base:          #0D0818;
-  --bg-card:          #160B24;
-  --bg-raised:        #1E0F30;
-  --bg-sunken:        #0A0514;
+  --bg-base:          #1A1626;   /* was #0D0818 — lighter charcoal-purple canvas */
+  --bg-card:          #251F38;   /* was #160B24 */
+  --bg-raised:        #302849;   /* was #1E0F30 */
+  --bg-sunken:        #150F20;   /* was #0A0514 */
 
-  --border-subtle:    rgba(137, 82, 165, 0.12);
-  --border-medium:    rgba(137, 82, 165, 0.22);
-  --border-strong:    rgba(137, 82, 165, 0.40);
+  --border-subtle:    rgba(176, 145, 214, 0.14);
+  --border-medium:    rgba(176, 145, 214, 0.24);
+  --border-strong:    rgba(176, 145, 214, 0.42);
 
-  --text-primary:     #F1F5F9;
-  --text-secondary:   #94A3B8;
-  --text-muted:       #64748B;
-  --text-placeholder: #334155;
+  --text-primary:     #F5F3FA;   /* brighter than #F1F5F9 for better contrast */
+  --text-secondary:   #ADA3C4;   /* was #94A3B8 — warmer + lighter */
+  --text-muted:       #7E7396;   /* was #64748B */
+  --text-placeholder: #443B5C;
 
-  --teal-surface:     rgba(72, 196, 198, 0.10);
-  --purple-surface:   rgba(137, 82, 165, 0.10);
-  --teal-text:        #5DD6D8;
-  --purple-text:      #B07FCC;
+  --teal-surface:     rgba(72, 196, 198, 0.13);
+  --purple-surface:   rgba(137, 82, 165, 0.16);
+  --teal-text:        #6EE0E2;
+  --purple-text:      #C09AE0;
 
-  --success-surface:  rgba(5, 150, 105, 0.12);
-  --success-text:     #34D399;
-  --warning-surface:  rgba(217, 119, 6, 0.12);
-  --warning-text:     #FCD34D;
-  --error-surface:    rgba(220, 38, 38, 0.12);
-  --error-text:       #F87171;
-  --info-surface:     rgba(37, 99, 235, 0.12);
-  --info-text:        #60A5FA;
+  --success-surface:  rgba(5, 150, 105, 0.16);
+  --success-text:     #3EE6AD;
+  --warning-surface:  rgba(217, 119, 6, 0.16);
+  --warning-text:     #FDD877;
+  --error-surface:    rgba(220, 38, 38, 0.16);
+  --error-text:       #FF8A8A;
+  --info-surface:     rgba(37, 99, 235, 0.16);
+  --info-text:        #7DB4FF;
 
-  --shadow-xs:    0 1px 2px rgba(0,0,0,0.25);
-  --shadow-sm:    0 1px 3px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,0.18);
-  --shadow-md:    0 4px 16px rgba(0,0,0,0.28), 0 1px 4px rgba(0,0,0,0.20);
-  --shadow-lg:    0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.22);
-  --shadow-xl:    0 16px 48px rgba(0,0,0,0.40), 0 4px 16px rgba(0,0,0,0.28);
-  --shadow-float: 0 20px 60px rgba(0,0,0,0.50), 0 6px 20px rgba(137,82,165,0.15);
+  --shadow-xs:    0 1px 2px rgba(0,0,0,0.30);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.30), 0 4px 14px rgba(0,0,0,0.22);
+  --shadow-md:    0 4px 18px rgba(0,0,0,0.32), 0 1px 4px rgba(0,0,0,0.24);
+  --shadow-lg:    0 8px 36px rgba(0,0,0,0.38), 0 2px 10px rgba(0,0,0,0.26);
+  --shadow-xl:    0 18px 52px rgba(0,0,0,0.42), 0 4px 18px rgba(0,0,0,0.30);
+  --shadow-float: 0 22px 64px rgba(0,0,0,0.50), 0 6px 22px rgba(137,82,165,0.20);
 
-  --toggle-bg:        #0A0514;
-  --toggle-active-bg: #221136;
-  --toggle-active-fg: #818CF8;  /* moon indigo */
-  --toggle-inactive-fg: #475569;
+  --toggle-bg:        #150F20;
+  --toggle-active-bg: #302849;
+  --toggle-active-fg: #A78CF0;  /* moon indigo — slightly brighter on lighter bg */
+  --toggle-inactive-fg: #5E5478;
+
+  /* Loading-animation logo colors for dark mode — outline becomes a
+     soft muted lavender-gray (visible but gentle against the lighter
+     dark base), gap stays a soft off-white for a subtle glow. */
+  --logo-outline: #564A78;
+  --logo-gap:     #F4F1FA;
 
   color-scheme: dark;
 }
@@ -109,9 +128,9 @@ html.dark {
   /* Pyrexx brand */
   --color-pyrexx-blue:    #48C4C6;
   --color-pyrexx-purple:  #8952A5;
-  --color-pyrexx-darkBg:  #0D0818;
-  --color-pyrexx-darkCard:#160B24;
-  --color-pyrexx-surface: #1E0F30;
+  --color-pyrexx-darkBg:  #1A1626;
+  --color-pyrexx-darkCard:#251F38;
+  --color-pyrexx-surface: #302849;
 
   --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
 }
