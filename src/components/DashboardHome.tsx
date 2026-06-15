@@ -12,16 +12,18 @@ import DonutChart from "./DonutChart";
 import MeetingModal, { Meeting } from "./MeetingModal";
 import ListModal from "./ListModal";
 import LogoMark from "./LogoMark";
+import AnalyticsPanel from "./AnalyticsPanel";
+import ProfilePanel from "./ProfilePanel";
 
 /* ─── Framer Motion variants ────────────────────────────────────── */
 const containerV = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
-} as const ;
+};
 const itemV = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
-} as const ;
+};
 
 /* ─── Data ──────────────────────────────────────────────────────── */
 const recentCalls: Meeting[] = [
@@ -234,23 +236,6 @@ function OutcomesCard() {
   );
 }
 
-/* ─── ComingSoon ────────────────────────────────────────────────── */
-function ComingSoon({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
-  return (
-    <motion.div variants={itemV} className="flex flex-col items-center justify-center py-24 px-6 text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
-        style={{ background: "var(--teal-surface)" }}>
-        <Icon size={28} style={{ color: "var(--teal)" }} aria-hidden="true" />
-      </div>
-      <h2 className="text-xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>{title}</h2>
-      <p className="text-sm max-w-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>{description}</p>
-      <span className="mt-5 badge text-xs" style={{ background: "var(--purple-surface)", color: "var(--purple-text)" }}>
-        <Sparkles size={11} aria-hidden="true" /> Coming Soon
-      </span>
-    </motion.div>
-  );
-}
-
 /* ─── Dashboard Panel ───────────────────────────────────────────── */
 type ModalKey = "recent" | "booked" | "upcoming" | null;
 function DashboardPanel({ onSelectMeeting }: { onSelectMeeting: (m: Meeting) => void }) {
@@ -402,17 +387,9 @@ export default function DashboardHome() {
             {activeTab === "dashboard" ? (
               <DashboardPanel onSelectMeeting={setSelected} />
             ) : activeTab === "analytics" ? (
-              <ComingSoon
-                icon={BarChart3}
-                title="Analytics"
-                description="Deep performance analytics — conversion funnels, intent trends, response-time distributions, and revenue attribution."
-              />
+              <AnalyticsPanel />
             ) : (
-              <ComingSoon
-                icon={UserCircle2}
-                title="Profile"
-                description="Manage your clinic profile, AI receptionist settings, team access, and notification preferences."
-              />
+              <ProfilePanel />
             )}
           </motion.div>
         </AnimatePresence>
