@@ -16,7 +16,7 @@ import AnalyticsPanel from "./AnalyticsPanel";
 import ProfilePanel from "./ProfilePanel";
 
 /* ─── Framer Motion variants ────────────────────────────────────── */
-const containerV = {
+const containerV: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
 };
