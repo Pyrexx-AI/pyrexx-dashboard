@@ -15,12 +15,15 @@ export const metadata: Metadata = {
   description:
     "Monitor your AI receptionist performance — call pickup rates, bookings, transcripts, and more.",
   robots: { index: false, follow: false }, // Private dashboard — keep off search
-  // FIX: Use the real Pyrexx mark as favicon / app icon (was missing entirely before)
-  icons: {
-    icon: "/PyrexxAI_logo.png",
-    shortcut: "/PyrexxAI_logo.png",
-    apple: "/PyrexxAI_logo.png",
-  },
+  // FIX: Favicon now comes from the Next.js FILE-BASED icon convention —
+  // src/app/icon.png and src/app/apple-icon.png — rather than this
+  // metadata.icons field. The two approaches can conflict/override each
+  // other unpredictably, and a stray default `favicon.ico` left over from
+  // create-next-app scaffolding (if one exists in src/app/) will often win
+  // over this field in real browsers regardless of what's declared here.
+  // If a `src/app/favicon.ico` file exists in this project, DELETE IT —
+  // its mere presence can keep showing the old default icon even with
+  // icon.png present alongside it.
 };
 
 // FIX: Explicit viewport export (Next.js 14+ best practice; ensures no zoom disable)

@@ -16,6 +16,13 @@ import AnalyticsPanel from "./AnalyticsPanel";
 import ProfilePanel from "./ProfilePanel";
 
 /* ─── Framer Motion variants ────────────────────────────────────── */
+/*
+  FIX: Explicit `Variants` type annotation — without it, TS widens
+  `type: "spring"` and `ease: "easeOut"` to plain `string`, which is
+  incompatible with Framer Motion's Transition union types and
+  breaks the production build (see git history — this exact issue
+  previously failed Vercel's type-check step).
+*/
 const containerV: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },

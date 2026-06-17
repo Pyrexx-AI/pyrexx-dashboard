@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { motion, type Variants } from "framer-motion";
 import {
   Building2, Bot, Users, CreditCard, Bell,
   Calendar, MapPin, Phone, Globe, Clock,
-  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download,
+  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2,
 } from "lucide-react";
 import Switch from "./ui/Switch";
 
@@ -47,8 +47,8 @@ const teamMembers = [
 ];
 
 const plan = {
-  name: "Growth Plan",
-  price: "$249/month",
+  name: "AI Receptionist Plan",
+  price: "$1,000/month",
   renewal: "July 14, 2026",
   minutesUsed: 1847,
   minutesIncluded: 2500,
@@ -61,7 +61,7 @@ interface Integration {
   icon: React.ElementType;
 }
 const integrations: Integration[] = [
-  { name: "Retell AI Voice Agent", desc: "Powers your AI receptionist calls", status: "connected",     icon: Bot },
+  { name: "AI Receptionist Agent", desc: "Powers your AI receptionist calls", status: "connected",     icon: Bot },
   { name: "Google Calendar",        desc: "Syncs bookings in real time",       status: "connected",     icon: Calendar },
   { name: "CRM (HubSpot)",           desc: "Sync patient records & call logs",  status: "not_connected", icon: Database },
 ];
@@ -102,18 +102,50 @@ function EditButton({ label }: { label: string }) {
 }
 
 /* ─── Main Panel ────────────────────────────────────────────────── */
-export default function ProfilePanel() {
+export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
   const [prefs, setPrefs] = useState({
     dailyDigest: true,
     missedCallSms: true,
     newBookingPush: true,
     weeklyReport: false,
   });
+  const [isPending, startTransition] = useTransition();
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   const togglePref = (key: keyof typeof prefs) =>
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
   const usagePct = Math.round((plan.minutesUsed / plan.minutesIncluded) * 100);
+
+  /**
+   * Opens Dodo's hosted checkout for this clinic's $1,000/mo plan.
+   * NOTE: `clinicId` must be supplied by the parent — DashboardHome
+   * currently renders mock data and doesn't yet thread through the
+   * authenticated session's clinic_id. Wire that up alongside the
+   * broader "replace mock arrays with live data" step described in
+   * AI_RECEPTIONIST_INTEGRATION.md / api/dashboard/summary.
+   */
+  function handleManageBilling() {
+    if (!clinicId) {
+      setBillingError("Billing isn't available yet — clinic context missing.");
+      return;
+    }
+    setBillingError(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clinicId }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Could not open billing portal");
+        window.location.href = json.checkoutUrl;
+      } catch (err) {
+        setBillingError(err instanceof Error ? err.message : "Something went wrong");
+      }
+    });
+  }
 
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="flex flex-col gap-4">
@@ -253,11 +285,15 @@ export default function ProfilePanel() {
                   initial={{ width: 0 }} animate={{ width: `${usagePct}%` }} transition={{ duration: 0.7, ease: "easeOut" }} />
               </div>
             </div>
-            <button type="button"
-              className="w-full mt-1 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+            <button type="button" onClick={handleManageBilling} disabled={isPending}
+              className="w-full mt-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
               style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
-              Manage Billing
+              {isPending && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
+              {isPending ? "Opening billing…" : "Manage Billing"}
             </button>
+            {billingError && (
+              <p className="text-[11px] mt-1.5" style={{ color: "var(--error-text)" }} role="alert">{billingError}</p>
+            )}
           </Section>
 
           {/* Integrations */}
