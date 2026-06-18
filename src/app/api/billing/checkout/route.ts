@@ -1,3 +1,4 @@
+// src/app/api/billing/checkout/route.ts
 /**
  * POST /api/billing/checkout
  * ───────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, clinic_id")
+    .select("*")
     .eq("id", user.id)
     .single();
 
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("id, name, contact_email")
+    .select("*")
     .eq("id", clinicId)
     .single();
 

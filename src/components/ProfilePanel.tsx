@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { motion, type Variants } from "framer-motion";
 import {
   Building2, Bot, Users, CreditCard, Bell,
@@ -8,6 +8,11 @@ import {
   Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2,
 } from "lucide-react";
 import Switch from "./ui/Switch";
+import { createClient } from "@/lib/supabase/client";
+import type { Database as DB } from "@/types/database";
+
+type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
+type Profile = DB["public"]["Tables"]["profiles"]["Row"];
 
 /* ─── Variants ──────────────────────────────────────────────────── */
 const containerV: Variants = {
@@ -18,53 +23,6 @@ const itemV: Variants = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
 };
-
-/* ─── Data ──────────────────────────────────────────────────────── */
-const clinicInfo = {
-  name: "Radiance MedSpa & Wellness",
-  address: "1240 Ocean Drive, Miami, FL 33139",
-  phone: "+1 (305) 555-0182",
-  website: "radiancemedspa.com",
-  timezone: "Eastern Time (ET)",
-};
-
-const aiSettings = {
-  agentName: "Aria",
-  voice: "Sarah — Warm & Professional (US English)",
-  greeting:
-    "Thank you for calling Radiance MedSpa, this is Aria. How can I help you today?",
-  hours: [
-    { day: "Mon – Fri", time: "8:00 AM – 7:00 PM" },
-    { day: "Saturday",  time: "9:00 AM – 4:00 PM" },
-    { day: "Sunday",    time: "Closed" },
-  ],
-};
-
-const teamMembers = [
-  { name: "Dr. Lisa Monroe", role: "Owner / Lead Physician", email: "lisa@radiancemedspa.com",   initials: "LM", color: "#48C4C6" },
-  { name: "Carlos Mendes",   role: "Front Desk Manager",     email: "carlos@radiancemedspa.com", initials: "CM", color: "#8952A5" },
-  { name: "Priya Anand",     role: "Esthetician",            email: "priya@radiancemedspa.com",  initials: "PA", color: "#60A5FA" },
-];
-
-const plan = {
-  name: "AI Receptionist Plan",
-  price: "$1,000/month",
-  renewal: "July 14, 2026",
-  minutesUsed: 1847,
-  minutesIncluded: 2500,
-};
-
-interface Integration {
-  name: string;
-  desc: string;
-  status: "connected" | "not_connected";
-  icon: React.ElementType;
-}
-const integrations: Integration[] = [
-  { name: "AI Receptionist Agent", desc: "Powers your AI receptionist calls", status: "connected",     icon: Bot },
-  { name: "Google Calendar",        desc: "Syncs bookings in real time",       status: "connected",     icon: Calendar },
-  { name: "CRM (HubSpot)",           desc: "Sync patient records & call logs",  status: "not_connected", icon: Database },
-];
 
 /* ─── Section wrapper ───────────────────────────────────────────── */
 function Section({ icon: Icon, iconBg, iconColor, title, action, children }: {
@@ -109,21 +67,41 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     newBookingPush: true,
     weeklyReport: false,
   });
+  
   const [isPending, startTransition] = useTransition();
   const [billingError, setBillingError] = useState<string | null>(null);
+
+  // Database State
+  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const [team, setTeam] = useState<Profile[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  useEffect(() => {
+    if (!clinicId) return;
+
+    async function fetchData(id: string) {
+      setLoadingData(true);
+      const supabase = createClient();
+      
+      const [clinicRes, teamRes] = await Promise.all([
+        supabase.from("clinics").select("*").eq("id", id).single(),
+        supabase.from("profiles").select("*").eq("clinic_id", id),
+      ]);
+
+      if (clinicRes.data) setClinic(clinicRes.data);
+      if (teamRes.data) setTeam(teamRes.data);
+      
+      setLoadingData(false);
+    }
+
+    fetchData(clinicId);
+  }, [clinicId]);
 
   const togglePref = (key: keyof typeof prefs) =>
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
-  const usagePct = Math.round((plan.minutesUsed / plan.minutesIncluded) * 100);
-
   /**
    * Opens Dodo's hosted checkout for this clinic's $1,000/mo plan.
-   * NOTE: `clinicId` must be supplied by the parent — DashboardHome
-   * currently renders mock data and doesn't yet thread through the
-   * authenticated session's clinic_id. Wire that up alongside the
-   * broader "replace mock arrays with live data" step described in
-   * AI_RECEPTIONIST_INTEGRATION.md / api/dashboard/summary.
    */
   function handleManageBilling() {
     if (!clinicId) {
@@ -146,6 +124,87 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
       }
     });
   }
+
+  // Show a loading skeleton/spinner while fetching real data
+  if (loadingData) {
+    return (
+      <div className="w-full h-64 flex flex-col items-center justify-center gap-3">
+        <Loader2 size={28} className="animate-spin" style={{ color: "var(--teal)" }} />
+        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Loading profile data...</p>
+      </div>
+    );
+  }
+
+  /* ─── Dynamic Data Mapping ────────────────────────────────────── */
+  const clinicInfo = {
+    name: clinic?.name || "Unknown Clinic",
+    address: "Address not set", // Future DB enhancement
+    phone: clinic?.phone_number || "—",
+    website: clinic?.website || "—",
+    timezone: "Eastern Time (ET)", // Future DB enhancement
+    initials: (clinic?.name || "C")
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase(),
+  };
+
+  const aiSettings = {
+    agentName: clinic?.receptionist_name || "Aria",
+    voice: "Sarah — Warm & Professional (US English)",
+    greeting: `Thank you for calling ${clinic?.name || "us"}, this is ${clinic?.receptionist_name || "Aria"}. How can I help you today?`,
+    hours: [
+      { day: "Mon – Fri", time: "8:00 AM – 7:00 PM" },
+      { day: "Saturday",  time: "9:00 AM – 4:00 PM" },
+      { day: "Sunday",    time: "Closed" },
+    ],
+  };
+
+  const colors = ["#48C4C6", "#8952A5", "#60A5FA", "#F59E0B"];
+  const mappedTeamMembers = team.map((m, i) => ({
+    name: m.full_name || "Team Member",
+    role: m.role.charAt(0).toUpperCase() + m.role.slice(1),
+    email: m.role === "owner" ? clinic?.contact_email : "—",
+    initials: (m.full_name || "U")
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase(),
+    color: colors[i % colors.length],
+  }));
+
+  const plan = {
+    name: "AI Receptionist Plan",
+    price: clinic?.plan_price_cents ? `$${clinic.plan_price_cents / 100}/month` : "$1,000/month",
+    renewal: "TBD", // Handled dynamically once billing is active
+    minutesUsed: 0,
+    minutesIncluded: 2500,
+  };
+  const isSubActive = clinic?.subscription_status === "active";
+  const usagePct = Math.round((plan.minutesUsed / plan.minutesIncluded) * 100);
+
+  const integrations = [
+    { 
+      name: "AI Receptionist Agent", 
+      desc: "Powers your AI receptionist calls", 
+      status: clinic?.agent_id ? "connected" : "not_connected", 
+      icon: Bot 
+    },
+    { 
+      name: "Google Calendar",        
+      desc: "Syncs bookings in real time",       
+      status: "not_connected", 
+      icon: Calendar 
+    },
+    { 
+      name: `CRM (${clinic?.crm_provider && clinic.crm_provider !== 'none' ? clinic.crm_provider.toUpperCase() : 'None'})`, 
+      desc: "Sync patient records & call logs",  
+      status: clinic?.crm_provider && clinic.crm_provider !== 'none' ? "connected" : "not_connected", 
+      icon: Database 
+    },
+  ];
 
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="flex flex-col gap-4">
@@ -170,7 +229,7 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
                 style={{ background: "var(--teal-surface)", color: "var(--teal-text)" }}
                 aria-hidden="true"
               >
-                RM
+                {clinicInfo.initials}
               </div>
               <div className="flex-1 min-w-0">
                 <h4 className="text-base font-bold mb-2" style={{ color: "var(--text-primary)" }}>{clinicInfo.name}</h4>
@@ -242,15 +301,15 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
               </button>
             }>
             <ul className="space-y-3" role="list">
-              {teamMembers.map((m) => (
-                <li key={m.email} className="flex items-center gap-3">
+              {mappedTeamMembers.map((m) => (
+                <li key={m.name + m.role} className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
                     style={{ background: m.color }} aria-hidden="true">
                     {m.initials}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{m.name}</p>
-                    <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{m.role} · {m.email}</p>
+                    <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{m.role} {m.email !== "—" && `· ${m.email}`}</p>
                   </div>
                 </li>
               ))}
@@ -268,8 +327,12 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
                 <p className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{plan.name}</p>
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>{plan.price} · renews {plan.renewal}</p>
               </div>
-              <span className="badge text-[10px]" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
-                <CheckCircle2 size={10} aria-hidden="true" /> Active
+              <span className="badge text-[10px]" style={{ 
+                background: isSubActive ? "var(--success-surface)" : "var(--warning-surface)", 
+                color: isSubActive ? "var(--success-text)" : "var(--warning-text)" 
+              }}>
+                {isSubActive ? <CheckCircle2 size={10} aria-hidden="true" /> : <Clock size={10} aria-hidden="true" />}
+                {isSubActive ? "Active" : "Pending Setup"}
               </span>
             </div>
             <div>
@@ -372,7 +435,12 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             </button>
             <button type="button"
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
-              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
+              onClick={async () => {
+                const supabase = createClient();
+                await supabase.auth.signOut();
+                window.location.href = '/login';
+              }}>
               <LogOut size={13} aria-hidden="true" /> Sign Out
             </button>
           </motion.div>

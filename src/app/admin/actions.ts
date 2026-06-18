@@ -1,3 +1,4 @@
+// src/app/admin/actions.ts
 "use server";
 
 /**
@@ -5,7 +6,7 @@
  * ───────────────────────────────────────────────────────────────
  * Every action here re-verifies role === 'admin' via the regular
  * (RLS-respecting) server client before writing. This is
- * belt-and-suspenders: middleware.ts already blocks non-admins from
+ * belt-and-suspenders: proxy.ts already blocks non-admins from
  * reaching /admin/*, and the RLS policies in 0001_init_schema.sql
  * (`admin_update_clinics`, `admin_all_integration_credentials`) would
  * reject the write anyway — but checking explicitly here gives a
@@ -23,7 +24,7 @@ async function requireAdmin() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("*")
     .eq("id", user.id)
     .single();
 

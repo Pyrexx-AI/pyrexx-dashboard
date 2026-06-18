@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import LogoMark from "@/components/LogoMark";
 
@@ -14,6 +14,7 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +37,7 @@ export default function LoginForm() {
     // the page they were trying to reach before being redirected here).
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("*")
       .eq("id", data.user.id)
       .single();
 
@@ -101,15 +102,26 @@ export default function LoginForm() {
               <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
               <input
                 id="password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors"
-                style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+                className="w-full pl-9 py-2.5 rounded-xl text-sm outline-none transition-colors"
+                style={{ paddingRight: "2.5rem", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
                 placeholder="••••••••"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer transition-colors"
+                style={{ color: "var(--text-muted)" }}
+                onMouseOver={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+                onMouseOut={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 /**
- * Root Middleware — Auth Gate + Role Routing
+ * Root Proxy (formerly Middleware) — Auth Gate + Role Routing
  * ───────────────────────────────────────────────────────────────
  * Runs on every request (except static assets — see `matcher`).
  *
@@ -18,13 +18,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/auth"];
+// Added /api/onboarding so unauthenticated users can create their accounts
+const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/onboarding"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { response, user, supabase } = await updateSession(request);
   const { pathname } = request.nextUrl;
 
@@ -49,7 +50,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/admin")) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("*")
       .eq("id", user.id)
       .single();
 

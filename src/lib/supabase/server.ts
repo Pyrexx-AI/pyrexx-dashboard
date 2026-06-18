@@ -12,6 +12,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -32,7 +33,7 @@ export async function createClient() {
           } catch {
             // setAll is called from a Server Component during render,
             // where cookie mutation isn't allowed. Safe to ignore if
-            // middleware is also refreshing the session (see middleware.ts).
+            // middleware is also refreshing the session (see proxy.ts).
           }
         },
       },
@@ -54,12 +55,23 @@ export async function createClient() {
  * explicit, deliberate authorization check first — it ignores every
  * RLS policy in 0001_init_schema.sql.
  */
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-
 export function createAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("❌ Fatal: Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL in environment.");
+    throw new Error("Server configuration error: Missing Supabase Admin API keys.");
+  }
+
   return createSupabaseClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
+    supabaseUrl,
+    serviceRoleKey,
+    { 
+      auth: { autoRefreshToken: false, persistSession: false },
+      // FIX: Forces the Supabase client to use the Next.js global fetch, 
+      // preventing Node.js fetch desyncs in server environments.
+      global: { fetch: fetch } 
+    }
   );
 }

@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
-  Building2, Globe, Phone, Mail, Lock, Database,
+  Building2, Globe, Phone, Mail, Lock, Database, Eye, EyeOff,
   Bot, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Loader2,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import LogoMark from "@/components/LogoMark";
 import type { CrmProvider } from "@/types/database";
 
@@ -62,7 +61,7 @@ function Field({ label, icon: Icon, children, hint }: {
   );
 }
 
-const inputClass = "w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors";
+const inputClass = "w-full pl-9 py-2.5 rounded-xl text-sm outline-none transition-colors";
 const inputStyle = { background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" } as const;
 
 export default function OnboardingWizard() {
@@ -71,6 +70,10 @@ export default function OnboardingWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [dbFixRequired, setDbFixRequired] = useState(false);
+  
+  // Password visibility toggle state
+  const [showPassword, setShowPassword] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     clinicName: "",
@@ -115,45 +118,124 @@ export default function OnboardingWizard() {
     setSubmitting(true);
     setError(null);
 
-    const supabase = createClient();
+    try {
+      const res = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clinicName: form.clinicName,
+          website: form.website || null,
+          phoneNumber: form.phoneNumber,
+          contactEmail: form.contactEmail,
+          crmProvider: form.crmProvider,
+          crmOtherName: form.crmProvider === "other" ? form.crmOtherName : null,
+          receptionistName: form.receptionistName,
+          password: form.password,
+        }),
+      });
 
-    // 1. Create the clinic row first (status defaults to 'onboarding').
-    //    This uses the anon key + an RLS policy permissive enough for
-    //    inserts from unauthenticated signup — OR, more robustly,
-    //    route this through a server action / API route using the
-    //    admin client so RLS doesn't need a public insert policy at
-    //    all. The API-route approach is shown in
-    //    src/app/api/onboarding/route.ts referenced below.
-    const res = await fetch("/api/onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clinicName: form.clinicName,
-        website: form.website || null,
-        phoneNumber: form.phoneNumber,
-        contactEmail: form.contactEmail,
-        crmProvider: form.crmProvider,
-        crmOtherName: form.crmProvider === "other" ? form.crmOtherName : null,
-        receptionistName: form.receptionistName,
-        password: form.password,
-      }),
-    });
+      let json;
+      try {
+        json = await res.json();
+      } catch (parseError) {
+        throw new Error("Received an invalid response from the server. Please try again.");
+      }
 
-    const json = await res.json();
+      if (!res.ok) {
+        if (json.requiresDbFix) {
+          setDbFixRequired(true);
+          setSubmitting(false);
+          return;
+        }
+        setError(json.error || "Something went wrong. Please try again.");
+        setSubmitting(false);
+        return;
+      }
 
-    if (!res.ok) {
-      setError(json.error || "Something went wrong. Please try again.");
+      setDone(true);
       setSubmitting(false);
-      return;
+
+      setTimeout(() => {
+        router.push("/login");
+      }, 2200);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "A network error occurred.");
+      setSubmitting(false);
     }
+  }
 
-    setDone(true);
-    setSubmitting(false);
+  /* ─── The Fix View ────────────────────────────────────────────── */
+  if (dbFixRequired) {
+    const sqlSnippet = `-- Fix failing auth.users trigger
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  begin
+    insert into public.profiles (id, clinic_id, role, full_name)
+    values (
+      new.id,
+      nullif(new.raw_user_meta_data->>'clinic_id', '')::uuid,
+      coalesce(new.raw_user_meta_data->>'role', 'owner'),
+      new.raw_user_meta_data->>'full_name'
+    );
+  exception when others then
+    -- Suppress crashes so the user account is safely created
+    raise log 'Profile creation failed: %', sqlerrm;
+  end;
+  return new;
+end;
+$$;
 
-    // Brief pause so the success state is visible before redirect.
-    setTimeout(() => {
-      router.push("/login");
-    }, 2200);
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();`;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ background: "var(--bg-base)" }}>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="card w-full max-w-2xl p-6 md:p-8 flex flex-col gap-5"
+        >
+          <div className="flex items-center gap-3 text-red-600">
+            <AlertCircle size={28} />
+            <h2 className="text-xl font-bold">Database Trigger Hex Detected</h2>
+          </div>
+          
+          <div className="space-y-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+            <p>
+              Your Supabase instance is blocking user creation because a background database trigger (<code>handle_new_user</code>) is failing internally. This is a very common issue caused by mismatched schemas or missing <code>SECURITY DEFINER</code> policies.
+            </p>
+            <p className="font-semibold" style={{ color: "var(--text-primary)" }}>
+              To break this hex once and for all, paste and run this exact SQL in your Supabase SQL Editor:
+            </p>
+          </div>
+
+          <div className="relative">
+            <pre className="p-4 rounded-xl text-xs overflow-x-auto custom-scroll" style={{ background: "#1E1E1E", color: "#48C4C6" }}>
+              <code>{sqlSnippet}</code>
+            </pre>
+          </div>
+
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            This snippet wraps the trigger in a safe error-handler so user creation never hangs again. Our API route will automatically handle creating the profile safely once you proceed.
+          </p>
+
+          <button
+            onClick={(e) => { setDbFixRequired(false); handleSubmit(e); }}
+            className="w-full flex items-center justify-center gap-2 py-3 mt-2 rounded-xl text-sm font-semibold cursor-pointer transition-colors"
+            style={{ background: "var(--teal)", color: "#fff" }}
+          >
+            I've run the SQL, try signing up again
+          </button>
+        </motion.div>
+      </div>
+    );
   }
 
   if (done) {
@@ -226,12 +308,12 @@ export default function OnboardingWizard() {
                     <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>This appears on your dashboard and reports.</p>
                   </div>
                   <Field label="Clinic Name" icon={Building2}>
-                    <input className={inputClass} style={inputStyle} value={form.clinicName}
+                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.clinicName}
                       onChange={(e) => update("clinicName", e.target.value)}
                       placeholder="Radiance MedSpa & Wellness" required />
                   </Field>
                   <Field label="Website" icon={Globe} hint="Optional — helps us match your brand voice.">
-                    <input className={inputClass} style={inputStyle} value={form.website}
+                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.website}
                       onChange={(e) => update("website", e.target.value)}
                       placeholder="radiancemedspa.com" type="url" />
                   </Field>
@@ -248,12 +330,12 @@ export default function OnboardingWizard() {
                     </p>
                   </div>
                   <Field label="Clinic Phone Number" icon={Phone} hint="The number your AI Receptionist will be connected to.">
-                    <input className={inputClass} style={inputStyle} value={form.phoneNumber}
+                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.phoneNumber}
                       onChange={(e) => update("phoneNumber", e.target.value)}
                       placeholder="+1 (305) 555-0182" type="tel" required />
                   </Field>
                   <Field label="Contact Email" icon={Mail} hint="Where we'll send setup updates and your dashboard invite.">
-                    <input className={inputClass} style={inputStyle} value={form.contactEmail}
+                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.contactEmail}
                       onChange={(e) => update("contactEmail", e.target.value)}
                       placeholder="you@clinic.com" type="email" required />
                   </Field>
@@ -271,7 +353,7 @@ export default function OnboardingWizard() {
                   </div>
                   <Field label="CRM / Booking Software" icon={Database}>
                     <select
-                      className={`${inputClass} appearance-none cursor-pointer`}
+                      className={`${inputClass} pr-3 appearance-none cursor-pointer`}
                       style={inputStyle}
                       value={form.crmProvider}
                       onChange={(e) => update("crmProvider", e.target.value as CrmProvider)}
@@ -285,7 +367,7 @@ export default function OnboardingWizard() {
                   </Field>
                   {form.crmProvider === "other" && (
                     <Field label="Which one?" icon={Database}>
-                      <input className={inputClass} style={inputStyle} value={form.crmOtherName}
+                      <input className={`${inputClass} pr-3`} style={inputStyle} value={form.crmOtherName}
                         onChange={(e) => update("crmOtherName", e.target.value)}
                         placeholder="e.g. Zenoti" required />
                     </Field>
@@ -303,7 +385,7 @@ export default function OnboardingWizard() {
                     </p>
                   </div>
                   <Field label="Receptionist Name" icon={Bot}>
-                    <input className={inputClass} style={inputStyle} value={form.receptionistName}
+                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.receptionistName}
                       onChange={(e) => update("receptionistName", e.target.value)}
                       placeholder="Aria" required />
                   </Field>
@@ -320,9 +402,20 @@ export default function OnboardingWizard() {
                     </p>
                   </div>
                   <Field label="Password" icon={Lock} hint="At least 8 characters.">
-                    <input className={inputClass} style={inputStyle} value={form.password}
+                    <input className={inputClass} style={{ ...inputStyle, paddingRight: "2.5rem" }} value={form.password}
                       onChange={(e) => update("password", e.target.value)}
-                      placeholder="••••••••" type="password" minLength={8} required />
+                      placeholder="••••••••" type={showPassword ? "text" : "password"} minLength={8} required />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer transition-colors"
+                      style={{ color: "var(--text-muted)" }}
+                      onMouseOver={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+                      onMouseOut={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
                   </Field>
 
                   {/* Plan summary */}

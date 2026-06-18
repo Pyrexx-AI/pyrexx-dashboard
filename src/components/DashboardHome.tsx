@@ -14,15 +14,9 @@ import ListModal from "./ListModal";
 import LogoMark from "./LogoMark";
 import AnalyticsPanel from "./AnalyticsPanel";
 import ProfilePanel from "./ProfilePanel";
+import { createClient } from "@/lib/supabase/client";
 
 /* ─── Framer Motion variants ────────────────────────────────────── */
-/*
-  FIX: Explicit `Variants` type annotation — without it, TS widens
-  `type: "spring"` and `ease: "easeOut"` to plain `string`, which is
-  incompatible with Framer Motion's Transition union types and
-  breaks the production build (see git history — this exact issue
-  previously failed Vercel's type-check step).
-*/
 const containerV: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
@@ -303,19 +297,48 @@ const TABS: { id: TabId; icon: React.ElementType; label: string }[] = [
 export default function DashboardHome() {
   const [activeTab, setActiveTab]       = useState<TabId>("dashboard");
   const [selectedMeeting, setSelected]  = useState<Meeting | null>(null);
-  const [isDark, setIsDark]             = useState(() =>
-    typeof window !== "undefined"
-      ? document.documentElement.classList.contains("dark")
-      : false
-  );
+  
+  const [isDark, setIsDark]             = useState<boolean>(false);
+  const [clinicId, setClinicId]         = useState<string | undefined>();
+  const [mounted, setMounted]           = useState(false);
   const tabPanelId = useId();
 
-  /* Persist theme */
   useEffect(() => {
+    setMounted(true);
+    
+    // Sync state with DOM immediately after mount to prevent hydration errors
+    const isDarkMode = document.documentElement.classList.contains("dark");
+    setIsDark(isDarkMode);
+
+    // Fetch the clinic ID for the Profile panel so billing links function
+    async function fetchUserContext() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        if (profile?.clinic_id) {
+          setClinicId(profile.clinic_id);
+        }
+      }
+    }
+    fetchUserContext();
+  }, []);
+
+  const toggleTheme = (dark: boolean) => {
+    setIsDark(dark);
     const root = document.documentElement;
-    if (isDark) { root.classList.add("dark");    localStorage.setItem("pyrexx-theme", "dark");  }
-    else        { root.classList.remove("dark"); localStorage.setItem("pyrexx-theme", "light"); }
-  }, [isDark]);
+    if (dark) {
+      root.classList.add("dark");
+      localStorage.setItem("pyrexx-theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("pyrexx-theme", "light");
+    }
+  };
 
   return (
     <div className="min-h-screen font-sans dashboard-bg">
@@ -353,28 +376,30 @@ export default function DashboardHome() {
         <div className="flex-1" />
 
         {/* Theme toggle — sun/moon pill with depression effect */}
-        <div className="theme-toggle-pill flex-shrink-0" role="group" aria-label="Color theme">
-          <button
-            type="button"
-            onClick={() => setIsDark(false)}
-            aria-label="Light mode"
-            aria-pressed={!isDark}
-            className={`theme-toggle-btn${!isDark ? " active" : ""}`}
-          >
-            <Sun size={14} aria-hidden="true" />
-            <span className="hidden sm:inline">Light</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsDark(true)}
-            aria-label="Dark mode"
-            aria-pressed={isDark}
-            className={`theme-toggle-btn${isDark ? " active" : ""}`}
-          >
-            <Moon size={14} aria-hidden="true" />
-            <span className="hidden sm:inline">Dark</span>
-          </button>
-        </div>
+        {mounted && (
+          <div className="theme-toggle-pill flex-shrink-0" role="group" aria-label="Color theme">
+            <button
+              type="button"
+              onClick={() => toggleTheme(false)}
+              aria-label="Light mode"
+              aria-pressed={!isDark}
+              className={`theme-toggle-btn${!isDark ? " active" : ""}`}
+            >
+              <Sun size={14} aria-hidden="true" />
+              <span className="hidden sm:inline">Light</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleTheme(true)}
+              aria-label="Dark mode"
+              aria-pressed={isDark}
+              className={`theme-toggle-btn${isDark ? " active" : ""}`}
+            >
+              <Moon size={14} aria-hidden="true" />
+              <span className="hidden sm:inline">Dark</span>
+            </button>
+          </div>
+        )}
       </motion.header>
 
       {/* ── Tab panel ─────────────────────────────────────────── */}
@@ -396,7 +421,7 @@ export default function DashboardHome() {
             ) : activeTab === "analytics" ? (
               <AnalyticsPanel />
             ) : (
-              <ProfilePanel />
+              <ProfilePanel clinicId={clinicId} />
             )}
           </motion.div>
         </AnimatePresence>
