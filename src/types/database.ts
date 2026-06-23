@@ -80,16 +80,21 @@ export type Database = {
         Row: {
           agent_id: string | null
           agent_phone_number: string | null
+          agent_provisioning_status: Database["public"]["Enums"]["provisioning_status"]
+          agent_provisioning_error: string | null
           contact_email: string
           created_at: string
           crm_other_name: string | null
           crm_provider: Database["public"]["Enums"]["crm_provider"]
           dodo_customer_id: string | null
+          dodo_product_id: string | null
           dodo_subscription_id: string | null
+          escalation_phone_number: string | null
           id: string
           name: string
           phone_number: string
           plan_price_cents: number
+          plan_tier: Database["public"]["Enums"]["plan_tier"]
           receptionist_name: string
           status: Database["public"]["Enums"]["clinic_status"]
           subscription_status:
@@ -101,16 +106,21 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           agent_phone_number?: string | null
+          agent_provisioning_status?: Database["public"]["Enums"]["provisioning_status"]
+          agent_provisioning_error?: string | null
           contact_email: string
           created_at?: string
           crm_other_name?: string | null
           crm_provider?: Database["public"]["Enums"]["crm_provider"]
           dodo_customer_id?: string | null
+          dodo_product_id?: string | null
           dodo_subscription_id?: string | null
+          escalation_phone_number?: string | null
           id?: string
           name: string
           phone_number: string
           plan_price_cents?: number
+          plan_tier?: Database["public"]["Enums"]["plan_tier"]
           receptionist_name: string
           status?: Database["public"]["Enums"]["clinic_status"]
           subscription_status?:
@@ -122,16 +132,21 @@ export type Database = {
         Update: {
           agent_id?: string | null
           agent_phone_number?: string | null
+          agent_provisioning_status?: Database["public"]["Enums"]["provisioning_status"]
+          agent_provisioning_error?: string | null
           contact_email?: string
           created_at?: string
           crm_other_name?: string | null
           crm_provider?: Database["public"]["Enums"]["crm_provider"]
           dodo_customer_id?: string | null
+          dodo_product_id?: string | null
           dodo_subscription_id?: string | null
+          escalation_phone_number?: string | null
           id?: string
           name?: string
           phone_number?: string
           plan_price_cents?: number
+          plan_tier?: Database["public"]["Enums"]["plan_tier"]
           receptionist_name?: string
           status?: Database["public"]["Enums"]["clinic_status"]
           subscription_status?:
@@ -209,6 +224,47 @@ export type Database = {
           },
         ]
       }
+      signed_agreements: {
+        Row: {
+          id: string
+          clinic_id: string
+          document_type: string
+          document_version: string
+          signer_name: string
+          signer_title: string | null
+          ip_address: string | null
+          signed_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          document_type: string
+          document_version: string
+          signer_name: string
+          signer_title?: string | null
+          ip_address?: string | null
+          signed_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          document_type?: string
+          document_version?: string
+          signer_name?: string
+          signer_title?: string | null
+          ip_address?: string | null
+          signed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signed_agreements_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -236,6 +292,8 @@ export type Database = {
         | "canceled"
         | "incomplete"
       user_role: "admin" | "owner" | "staff"
+      plan_tier: "overflow" | "full_time" | "usage_based"
+      provisioning_status: "pending" | "provisioning" | "provisioned" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -383,6 +441,8 @@ export const Constants = {
         "incomplete",
       ],
       user_role: ["admin", "owner", "staff"],
+      plan_tier: ["overflow", "full_time", "usage_based"],
+      provisioning_status: ["pending", "provisioning", "provisioned", "failed"],
     },
   },
 } as const
@@ -391,3 +451,5 @@ export type ClinicStatus = Database["public"]["Enums"]["clinic_status"];
 export type CrmProvider = Database["public"]["Enums"]["crm_provider"];
 export type SubscriptionStatus = Database["public"]["Enums"]["subscription_status"];
 export type UserRole = Database["public"]["Enums"]["user_role"];
+export type PlanTier = Database["public"]["Enums"]["plan_tier"];
+export type ProvisioningStatus = Database["public"]["Enums"]["provisioning_status"];

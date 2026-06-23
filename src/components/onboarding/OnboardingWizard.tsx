@@ -1,17 +1,45 @@
 "use client";
 
+/**
+ * OnboardingWizard — Unified DFY Onboarding Flow
+ * ───────────────────────────────────────────────────────────────
+ * Order: Clinic → Contact → CRM → Plan → Receptionist → Documents
+ *        (sign) → Payment (embedded) → Account (password) → done.
+ *
+ * This replaces the old two-stage flow (Google Sites doc-signing hub
+ * → external payment redirect → separate manual account creation)
+ * with everything happening on-domain, in one continuous wizard.
+ *
+ * KEY DESIGN DECISION — why the clinic record is created mid-flow,
+ * not at the very end:
+ * The user-visible step order is "sign documents → pay → sign up",
+ * but Dodo's checkout session needs a real clinic_id to attach as
+ * metadata (so the webhook that confirms payment can find the right
+ * clinic). So /api/onboarding/start (creating the clinic row +
+ * signed_agreements) fires right after the Documents step, BEFORE
+ * payment — invisibly to the user, who just sees "Continue" advance
+ * them to Payment like any other step. The auth LOGIN (email +
+ * password) is still created last, in /api/onboarding/finish, which
+ * is what "Account" step / the user's mental model of "signing up"
+ * actually refers to. See api/onboarding/start/route.ts for the full
+ * reasoning and the trade-off this implies (abandoned-mid-flow
+ * orphan clinic rows).
+ */
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
-  Building2, Globe, Phone, Mail, Lock, Database, Eye, EyeOff,
-  Bot, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Loader2,
+  Building2, Globe, Phone, Mail, Database,
+  Bot, ArrowRight, ArrowLeft, AlertCircle, Loader2,
 } from "lucide-react";
 import LogoMark from "@/components/LogoMark";
-import type { CrmProvider } from "@/types/database";
+import PlanSelector from "./PlanSelector";
+import DocumentSigner from "./DocumentSigner";
+import EmbeddedCheckout from "./EmbeddedCheckout";
+import AccountStep from "./AccountStep";
+import type { CrmProvider, PlanTier } from "@/types/database";
 
 /* ─── Step config ───────────────────────────────────────────────── */
-const STEPS = ["Clinic", "Contact", "CRM", "Receptionist", "Account"] as const;
+const STEPS = ["Clinic", "Contact", "CRM", "Plan", "Receptionist", "Documents", "Payment", "Account"] as const;
 type Step = number;
 
 const CRM_OPTIONS: { value: CrmProvider; label: string }[] = [
@@ -33,8 +61,9 @@ interface FormState {
   contactEmail: string;
   crmProvider: CrmProvider | "";
   crmOtherName: string;
+  planTier: PlanTier | "";
   receptionistName: string;
-  password: string;
+  signerName: string;
 }
 
 const slideVariants: Variants = {
@@ -61,206 +90,119 @@ function Field({ label, icon: Icon, children, hint }: {
   );
 }
 
-const inputClass = "w-full pl-9 py-2.5 rounded-xl text-sm outline-none transition-colors";
+const inputClass = "w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors";
 const inputStyle = { background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" } as const;
 
 export default function OnboardingWizard() {
-  const router = useRouter();
   const [step, setStep] = useState<Step>(0);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-  const [dbFixRequired, setDbFixRequired] = useState(false);
-  
-  // Password visibility toggle state
-  const [showPassword, setShowPassword] = useState(false);
+  const [creatingClinic, setCreatingClinic] = useState(false);
+  const [loadingCheckout, setLoadingCheckout] = useState(false);
+
+  // Populated once /api/onboarding/start succeeds (after Documents step).
+  const [clinicId, setClinicId] = useState<string | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
-    clinicName: "",
-    website: "",
-    phoneNumber: "",
-    contactEmail: "",
-    crmProvider: "",
-    crmOtherName: "",
-    receptionistName: "",
-    password: "",
+    clinicName: "", website: "", phoneNumber: "", contactEmail: "",
+    crmProvider: "", crmOtherName: "", planTier: "", receptionistName: "", signerName: "",
   });
+  const [docsSigned, setDocsSigned] = useState(false);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  /* ─── Per-step validation ────────────────────────────────────── */
   function stepValid(): boolean {
     switch (step) {
-      case 0: return form.clinicName.trim().length > 0; // website optional
+      case 0: return form.clinicName.trim().length > 0;
       case 1: return form.phoneNumber.trim().length > 0 && form.contactEmail.trim().length > 0;
       case 2: return form.crmProvider !== "" && (form.crmProvider !== "other" || form.crmOtherName.trim().length > 0);
-      case 3: return form.receptionistName.trim().length > 0;
-      case 4: return form.password.length >= 8;
+      case 3: return form.planTier !== "";
+      case 4: return form.receptionistName.trim().length > 0;
+      case 5: return docsSigned;
+      case 6: return true; // Payment step advances via the embedded checkout's onClosed event, not Continue
       default: return false;
     }
   }
 
-  function next() {
-    if (!stepValid()) return;
-    setError(null);
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
-  }
   function back() {
     setError(null);
-    setStep((s) => Math.max(s - 1, 0));
+    setStep((s) => Math.max(s - 1, 0) as Step);
   }
 
-  /* ─── Final submit ────────────────────────────────────────────── */
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  /**
+   * Advancing past the Documents step (5 → 6) is when
+   * /api/onboarding/start actually runs — see file-level doc comment
+   * for why this happens here rather than at the very end.
+   */
+  async function next() {
     if (!stepValid()) return;
-    setSubmitting(true);
     setError(null);
 
-    try {
-      const res = await fetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clinicName: form.clinicName,
-          website: form.website || null,
-          phoneNumber: form.phoneNumber,
-          contactEmail: form.contactEmail,
-          crmProvider: form.crmProvider,
-          crmOtherName: form.crmProvider === "other" ? form.crmOtherName : null,
-          receptionistName: form.receptionistName,
-          password: form.password,
-        }),
-      });
-
-      let json;
+    if (step === 5) {
+      setCreatingClinic(true);
       try {
-        json = await res.json();
-      } catch (parseError) {
-        throw new Error("Received an invalid response from the server. Please try again.");
-      }
+        const res = await fetch("/api/onboarding/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clinicName: form.clinicName,
+            website: form.website || null,
+            phoneNumber: form.phoneNumber,
+            contactEmail: form.contactEmail,
+            crmProvider: form.crmProvider,
+            crmOtherName: form.crmProvider === "other" ? form.crmOtherName : null,
+            receptionistName: form.receptionistName,
+            planTier: form.planTier,
+            signedDocuments: [
+              // One signature event per document type, all sharing
+              // the same typed name (see DocumentSigner.tsx).
+              ...["msa", "sow", "baa", "dpa", "privacy_policy", "terms_of_service"].map((documentType) => ({
+                documentType,
+                documentVersion: "PLACEHOLDER-v0", // mirrors lib/legal-docs/index.ts — update together
+                signerName: form.signerName,
+              })),
+            ],
+          }),
+        });
+        const json = await res.json();
 
-      if (!res.ok) {
-        if (json.requiresDbFix) {
-          setDbFixRequired(true);
-          setSubmitting(false);
+        if (!res.ok) {
+          setError(json.error || "Could not save your information. Please try again.");
+          setCreatingClinic(false);
           return;
         }
-        setError(json.error || "Something went wrong. Please try again.");
-        setSubmitting(false);
-        return;
+
+        setClinicId(json.clinicId);
+        setCreatingClinic(false);
+        setStep(6);
+
+        // Immediately kick off checkout session creation so the
+        // payment step doesn't show its own extra loading state on
+        // top of this one.
+        setLoadingCheckout(true);
+        const checkoutRes = await fetch("/api/onboarding/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clinicId: json.clinicId }),
+        });
+        const checkoutJson = await checkoutRes.json();
+        setLoadingCheckout(false);
+
+        if (!checkoutRes.ok) {
+          setError(checkoutJson.error || "Could not start payment. Please try again.");
+          return;
+        }
+        setCheckoutUrl(checkoutJson.checkoutUrl);
+      } catch {
+        setError("Network error — please check your connection and try again.");
+        setCreatingClinic(false);
+        setLoadingCheckout(false);
       }
-
-      setDone(true);
-      setSubmitting(false);
-
-      setTimeout(() => {
-        router.push("/login");
-      }, 2200);
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "A network error occurred.");
-      setSubmitting(false);
+      return;
     }
-  }
 
-  /* ─── The Fix View ────────────────────────────────────────────── */
-  if (dbFixRequired) {
-    const sqlSnippet = `-- Fix failing auth.users trigger
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = public
-as $$
-begin
-  begin
-    insert into public.profiles (id, clinic_id, role, full_name)
-    values (
-      new.id,
-      nullif(new.raw_user_meta_data->>'clinic_id', '')::uuid,
-      coalesce(new.raw_user_meta_data->>'role', 'owner'),
-      new.raw_user_meta_data->>'full_name'
-    );
-  exception when others then
-    -- Suppress crashes so the user account is safely created
-    raise log 'Profile creation failed: %', sqlerrm;
-  end;
-  return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();`;
-
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ background: "var(--bg-base)" }}>
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="card w-full max-w-2xl p-6 md:p-8 flex flex-col gap-5"
-        >
-          <div className="flex items-center gap-3 text-red-600">
-            <AlertCircle size={28} />
-            <h2 className="text-xl font-bold">Database Trigger Hex Detected</h2>
-          </div>
-          
-          <div className="space-y-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-            <p>
-              Your Supabase instance is blocking user creation because a background database trigger (<code>handle_new_user</code>) is failing internally. This is a very common issue caused by mismatched schemas or missing <code>SECURITY DEFINER</code> policies.
-            </p>
-            <p className="font-semibold" style={{ color: "var(--text-primary)" }}>
-              To break this hex once and for all, paste and run this exact SQL in your Supabase SQL Editor:
-            </p>
-          </div>
-
-          <div className="relative">
-            <pre className="p-4 rounded-xl text-xs overflow-x-auto custom-scroll" style={{ background: "#1E1E1E", color: "#48C4C6" }}>
-              <code>{sqlSnippet}</code>
-            </pre>
-          </div>
-
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            This snippet wraps the trigger in a safe error-handler so user creation never hangs again. Our API route will automatically handle creating the profile safely once you proceed.
-          </p>
-
-          <button
-            onClick={(e) => { setDbFixRequired(false); handleSubmit(e); }}
-            className="w-full flex items-center justify-center gap-2 py-3 mt-2 rounded-xl text-sm font-semibold cursor-pointer transition-colors"
-            style={{ background: "var(--teal)", color: "#fff" }}
-          >
-            I've run the SQL, try signing up again
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (done) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--bg-base)" }}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="card w-full max-w-sm p-8 flex flex-col items-center text-center gap-4"
-        >
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--success-surface)" }}>
-            <CheckCircle2 size={28} style={{ color: "var(--success-text)" }} aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>You're all set!</h2>
-            <p className="text-sm mt-1.5 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              Our team is setting up <strong>{form.receptionistName}</strong> for{" "}
-              {form.clinicName}. We'll email you at {form.contactEmail} as soon as
-              it's ready — usually within 1 business day.
-            </p>
-          </div>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>Redirecting to sign in…</p>
-        </motion.div>
-      </div>
-    );
+    setStep((s) => Math.min(s + 1, STEPS.length - 1) as Step);
   }
 
   return (
@@ -280,15 +222,13 @@ create trigger on_auth_user_created
         </div>
 
         {/* Progress */}
-        <div className="flex items-center gap-1.5" role="group" aria-label="Onboarding progress">
+        <div className="flex items-center gap-1" role="group" aria-label="Onboarding progress">
           {STEPS.map((label, i) => (
             <div key={label} className="flex-1 flex flex-col gap-1.5 items-center">
-              <div
-                className="h-1.5 w-full rounded-full transition-colors"
-                style={{ background: i <= step ? "var(--teal)" : "var(--bg-sunken)" }}
-                aria-hidden="true"
-              />
-              <span className="text-[10px] font-medium hidden sm:block" style={{ color: i === step ? "var(--teal-text)" : "var(--text-muted)" }}>
+              <div className="h-1.5 w-full rounded-full transition-colors"
+                style={{ background: i <= step ? "var(--teal)" : "var(--bg-sunken)" }} aria-hidden="true" />
+              <span className="text-[9px] font-medium hidden sm:block text-center leading-tight"
+                style={{ color: i === step ? "var(--teal-text)" : "var(--text-muted)" }}>
                 {label}
               </span>
             </div>
@@ -296,7 +236,7 @@ create trigger on_auth_user_created
         </div>
 
         {/* Card */}
-        <form onSubmit={handleSubmit} className="card p-6 md:p-7 overflow-hidden">
+        <div className="card p-6 md:p-7 overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={step} variants={slideVariants} initial="enter" animate="center" exit="exit" className="flex flex-col gap-4">
 
@@ -308,14 +248,12 @@ create trigger on_auth_user_created
                     <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>This appears on your dashboard and reports.</p>
                   </div>
                   <Field label="Clinic Name" icon={Building2}>
-                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.clinicName}
-                      onChange={(e) => update("clinicName", e.target.value)}
-                      placeholder="Radiance MedSpa & Wellness" required />
+                    <input className={inputClass} style={inputStyle} value={form.clinicName}
+                      onChange={(e) => update("clinicName", e.target.value)} placeholder="Radiance MedSpa & Wellness" required />
                   </Field>
                   <Field label="Website" icon={Globe} hint="Optional — helps us match your brand voice.">
-                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.website}
-                      onChange={(e) => update("website", e.target.value)}
-                      placeholder="radiancemedspa.com" type="url" />
+                    <input className={inputClass} style={inputStyle} value={form.website}
+                      onChange={(e) => update("website", e.target.value)} placeholder="radiancemedspa.com" type="url" />
                   </Field>
                 </>
               )}
@@ -325,19 +263,15 @@ create trigger on_auth_user_created
                 <>
                   <div>
                     <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>How do we reach you?</h2>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                      The phone number is what your AI Receptionist will answer.
-                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>The phone number is what your AI Receptionist will answer.</p>
                   </div>
                   <Field label="Clinic Phone Number" icon={Phone} hint="The number your AI Receptionist will be connected to.">
-                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.phoneNumber}
-                      onChange={(e) => update("phoneNumber", e.target.value)}
-                      placeholder="+1 (305) 555-0182" type="tel" required />
+                    <input className={inputClass} style={inputStyle} value={form.phoneNumber}
+                      onChange={(e) => update("phoneNumber", e.target.value)} placeholder="+1 (305) 555-0182" type="tel" required />
                   </Field>
                   <Field label="Contact Email" icon={Mail} hint="Where we'll send setup updates and your dashboard invite.">
-                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.contactEmail}
-                      onChange={(e) => update("contactEmail", e.target.value)}
-                      placeholder="you@clinic.com" type="email" required />
+                    <input className={inputClass} style={inputStyle} value={form.contactEmail}
+                      onChange={(e) => update("contactEmail", e.target.value)} placeholder="you@clinic.com" type="email" required />
                   </Field>
                 </>
               )}
@@ -347,36 +281,37 @@ create trigger on_auth_user_created
                 <>
                   <div>
                     <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>What do you use for bookings?</h2>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                      We'll connect your AI Receptionist to it during setup.
-                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>We'll connect your AI Receptionist to it during setup.</p>
                   </div>
                   <Field label="CRM / Booking Software" icon={Database}>
-                    <select
-                      className={`${inputClass} pr-3 appearance-none cursor-pointer`}
-                      style={inputStyle}
-                      value={form.crmProvider}
-                      onChange={(e) => update("crmProvider", e.target.value as CrmProvider)}
-                      required
-                    >
+                    <select className={`${inputClass} appearance-none cursor-pointer`} style={inputStyle}
+                      value={form.crmProvider} onChange={(e) => update("crmProvider", e.target.value as CrmProvider)} required>
                       <option value="" disabled>Select one…</option>
-                      {CRM_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
+                      {CRM_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                   </Field>
                   {form.crmProvider === "other" && (
                     <Field label="Which one?" icon={Database}>
-                      <input className={`${inputClass} pr-3`} style={inputStyle} value={form.crmOtherName}
-                        onChange={(e) => update("crmOtherName", e.target.value)}
-                        placeholder="e.g. Zenoti" required />
+                      <input className={inputClass} style={inputStyle} value={form.crmOtherName}
+                        onChange={(e) => update("crmOtherName", e.target.value)} placeholder="e.g. Zenoti" required />
                     </Field>
                   )}
                 </>
               )}
 
-              {/* ── Step 3: Receptionist ────────────────────────── */}
+              {/* ── Step 3: Plan ───────────────────────────────── */}
               {step === 3 && (
+                <>
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Choose your plan</h2>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>You can change tiers later from your dashboard.</p>
+                  </div>
+                  <PlanSelector selected={form.planTier} onSelect={(tier) => update("planTier", tier)} />
+                </>
+              )}
+
+              {/* ── Step 4: Receptionist ────────────────────────── */}
+              {step === 4 && (
                 <>
                   <div>
                     <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Name your AI Receptionist</h2>
@@ -385,51 +320,52 @@ create trigger on_auth_user_created
                     </p>
                   </div>
                   <Field label="Receptionist Name" icon={Bot}>
-                    <input className={`${inputClass} pr-3`} style={inputStyle} value={form.receptionistName}
-                      onChange={(e) => update("receptionistName", e.target.value)}
-                      placeholder="Aria" required />
+                    <input className={inputClass} style={inputStyle} value={form.receptionistName}
+                      onChange={(e) => update("receptionistName", e.target.value)} placeholder="Aria" required />
                   </Field>
                 </>
               )}
 
-              {/* ── Step 4: Account ─────────────────────────────── */}
-              {step === 4 && (
+              {/* ── Step 5: Documents ───────────────────────────── */}
+              {step === 5 && (
                 <>
                   <div>
-                    <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Create your login</h2>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                      You'll use {form.contactEmail || "this email"} to sign in to your dashboard.
-                    </p>
+                    <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Review & sign</h2>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Last step before payment.</p>
                   </div>
-                  <Field label="Password" icon={Lock} hint="At least 8 characters.">
-                    <input className={inputClass} style={{ ...inputStyle, paddingRight: "2.5rem" }} value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
-                      placeholder="••••••••" type={showPassword ? "text" : "password"} minLength={8} required />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer transition-colors"
-                      style={{ color: "var(--text-muted)" }}
-                      onMouseOver={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
-                      onMouseOut={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </Field>
-
-                  {/* Plan summary */}
-                  <div className="rounded-2xl p-4" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)" }}>
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Pyrexx AI Receptionist</span>
-                      <span className="text-sm font-extrabold" style={{ color: "var(--teal-text)" }}>$1,000<span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>/mo</span></span>
-                    </div>
-                    <p className="text-[11px] mt-1.5 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                      Includes full setup &amp; CRM connection, done by our team.
-                      Billing details are collected after your account is created.
-                    </p>
-                  </div>
+                  <DocumentSigner
+                    signerName={form.signerName}
+                    onSignerNameChange={(name) => update("signerName", name)}
+                    allSigned={docsSigned}
+                    onAllSignedChange={setDocsSigned}
+                  />
                 </>
+              )}
+
+              {/* ── Step 6: Payment ─────────────────────────────── */}
+              {step === 6 && (
+                <>
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Payment</h2>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Secure checkout — your card is processed by Dodo Payments.</p>
+                  </div>
+                  {loadingCheckout || !checkoutUrl ? (
+                    <div className="flex flex-col items-center justify-center gap-2 py-16">
+                      <Loader2 size={22} className="animate-spin" style={{ color: "var(--teal)" }} aria-hidden="true" />
+                      <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Preparing secure checkout…</p>
+                    </div>
+                  ) : (
+                    <EmbeddedCheckout
+                      checkoutUrl={checkoutUrl}
+                      onClosed={() => setStep(7)}
+                    />
+                  )}
+                </>
+              )}
+
+              {/* ── Step 7: Account ─────────────────────────────── */}
+              {step === 7 && clinicId && (
+                <AccountStep clinicId={clinicId} contactEmail={form.contactEmail} />
               )}
 
               {/* Error */}
@@ -442,32 +378,26 @@ create trigger on_auth_user_created
             </motion.div>
           </AnimatePresence>
 
-          {/* Nav buttons */}
-          <div className="flex items-center gap-3 mt-6">
-            {step > 0 && (
-              <button type="button" onClick={back}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors"
-                style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
-                <ArrowLeft size={14} aria-hidden="true" /> Back
-              </button>
-            )}
-            <div className="flex-1" />
-            {step < STEPS.length - 1 ? (
-              <button type="button" onClick={next} disabled={!stepValid()}
+          {/* Nav buttons — hidden on Payment (advances via the embed's own close event) and Account (has its own submit) */}
+          {step < 6 && (
+            <div className="flex items-center gap-3 mt-6">
+              {step > 0 && (
+                <button type="button" onClick={back}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors"
+                  style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
+                  <ArrowLeft size={14} aria-hidden="true" /> Back
+                </button>
+              )}
+              <div className="flex-1" />
+              <button type="button" onClick={next} disabled={!stepValid() || creatingClinic}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ background: "var(--teal)", color: "#fff" }}>
-                Continue <ArrowRight size={14} aria-hidden="true" />
+                {creatingClinic && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                {creatingClinic ? "Saving…" : "Continue"} {!creatingClinic && <ArrowRight size={14} aria-hidden="true" />}
               </button>
-            ) : (
-              <button type="submit" disabled={!stepValid() || submitting}
-                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ background: "var(--teal)", color: "#fff" }}>
-                {submitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-                {submitting ? "Setting up…" : "Create Account"}
-              </button>
-            )}
-          </div>
-        </form>
+            </div>
+          )}
+        </div>
 
         <p className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
           Already have an account?{" "}

@@ -1,3 +1,4 @@
+// src/components/ProfilePanel.tsx
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import Switch from "./ui/Switch";
 import { createClient } from "@/lib/supabase/client";
+import { getPlan } from "@/lib/plans";
 import type { Database as DB } from "@/types/database";
 
 type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
@@ -77,7 +79,10 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (!clinicId) return;
+    if (!clinicId) {
+      setLoadingData(false);
+      return;
+    }
 
     async function fetchData(id: string) {
       setLoadingData(true);
@@ -101,7 +106,7 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
   /**
-   * Opens Dodo's hosted checkout for this clinic's $1,000/mo plan.
+   * Opens Dodo's hosted checkout for this clinic's active plan.
    */
   function handleManageBilling() {
     if (!clinicId) {
@@ -135,13 +140,34 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     );
   }
 
+  // Admins (and any account with no clinic_id) have nothing to show
+  // here — this panel is clinic-scoped. Admins manage clients from /admin.
+  if (!clinicId) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center gap-3 py-20 text-center">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "var(--info-surface)" }}>
+          <Building2 size={20} style={{ color: "var(--info-text)" }} aria-hidden="true" />
+        </div>
+        <div>
+          <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>No clinic profile to show</p>
+          <p className="text-xs mt-1 max-w-xs" style={{ color: "var(--text-muted)" }}>
+            Admin accounts aren't tied to a single clinic. Manage client clinics from the admin dashboard.
+          </p>
+        </div>
+        <a href="/admin" className="text-xs font-semibold mt-1" style={{ color: "var(--teal-text)" }}>
+          Go to Admin Dashboard →
+        </a>
+      </div>
+    );
+  }
+
   /* ─── Dynamic Data Mapping ────────────────────────────────────── */
   const clinicInfo = {
     name: clinic?.name || "Unknown Clinic",
-    address: "Address not set", // Future DB enhancement
+    address: "Address not set", 
     phone: clinic?.phone_number || "—",
     website: clinic?.website || "—",
-    timezone: "Eastern Time (ET)", // Future DB enhancement
+    timezone: "Eastern Time (ET)", 
     initials: (clinic?.name || "C")
       .split(" ")
       .map((n) => n[0])
@@ -175,13 +201,17 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     color: colors[i % colors.length],
   }));
 
+  const currentPlanDefinition = clinic?.plan_tier ? getPlan(clinic.plan_tier) : null;
   const plan = {
-    name: "AI Receptionist Plan",
-    price: clinic?.plan_price_cents ? `$${clinic.plan_price_cents / 100}/month` : "$1,000/month",
+    name: currentPlanDefinition?.name || "AI Receptionist Plan",
+    price: clinic?.plan_price_cents 
+      ? `$${(clinic.plan_price_cents / 100).toLocaleString()}/month` 
+      : (currentPlanDefinition?.priceLabel || "TBD"),
     renewal: "TBD", // Handled dynamically once billing is active
     minutesUsed: 0,
     minutesIncluded: 2500,
   };
+  
   const isSubActive = clinic?.subscription_status === "active";
   const usagePct = Math.round((plan.minutesUsed / plan.minutesIncluded) * 100);
 

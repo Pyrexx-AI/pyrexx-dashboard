@@ -1,3 +1,4 @@
+// src/proxy.ts
 /**
  * Root Proxy (formerly Middleware) — Auth Gate + Role Routing
  * ───────────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-// Added /api/onboarding so unauthenticated users can create their accounts
+// Whitelisted paths for unauthenticated users
 const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/onboarding"];
 
 function isPublicPath(pathname: string): boolean {
@@ -34,34 +35,45 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  if (isPublicPath(pathname)) {
-    return response;
-  }
+  if (user) {
+    // Fetch user profile to enforce role-based access
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-  // No session → /login, preserving where they were headed.
-  if (!user) {
+    const isAdmin = profile?.role === "admin";
+
+    // UX Friction Fix: Prevent logged-in users from seeing the login/signup pages
+    if (isPublicPath(pathname)) {
+      const url = request.nextUrl.clone();
+      url.pathname = isAdmin ? "/admin" : "/";
+      url.search = ""; // Wipe query params like ?redirect
+      return NextResponse.redirect(url);
+    }
+
+    // Admin-area gate
+    if (pathname.startsWith("/admin") && !isAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
+    return response;
+    
+  } else {
+    // Unauthenticated users
+    if (isPublicPath(pathname)) {
+      return response;
+    }
+
+    // No session → /login, preserving where they were headed.
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
   }
-
-  // Admin-area gate: fetch role for this user.
-  if (pathname.startsWith("/admin")) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  return response;
 }
 
 export const config = {

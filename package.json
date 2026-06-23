@@ -13,12 +13,15 @@
     "@supabase/supabase-js": "^2.108.2",
     "clsx": "^2.1.1",
     "dodopayments": "^2.39.0",
+    "dodopayments-checkout": "^1.9.4",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.17.0",
     "next": "16.2.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
+    "retell-sdk": "^5.38.0",
+    "standardwebhooks": "^1.0.0",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {

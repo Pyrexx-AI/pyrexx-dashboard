@@ -1,4 +1,3 @@
-// src/app/admin/actions.ts
 "use server";
 
 /**
@@ -34,10 +33,6 @@ async function requireAdmin() {
 
 /**
  * Connect an AI Receptionist Agent to this clinic's account.
- * `agentId` is the underlying voice-agent platform's agent ID
- * (configured by the admin per AI_RECEPTIONIST_INTEGRATION.md —
- * including setting that agent's `clinic_id` metadata to THIS
- * clinic's id, so inbound webhooks route correctly).
  */
 export async function updateAgentConnection(
   clinicId: string,
@@ -59,10 +54,7 @@ export async function updateAgentConnection(
 }
 
 /**
- * Store/update CRM credentials for this clinic. Written to
- * `integration_credentials` (provider = 'crm'), which has NO
- * select/insert/update policy for non-admins — clinic users can
- * never read this row, by RLS design.
+ * Store/update CRM credentials for this clinic.
  */
 export async function updateCrmCredentials(
   clinicId: string,
@@ -91,14 +83,48 @@ export async function updateCrmCredentials(
 }
 
 /**
+ * Update the escalation phone number.
+ */
+export async function updateEscalationNumber(clinicId: string, escalationPhoneNumber: string) {
+  const supabase = await requireAdmin();
+
+  const { error } = await supabase
+    .from("clinics")
+    .update({ escalation_phone_number: escalationPhoneNumber.trim() || null })
+    .eq("id", clinicId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/clients/${clinicId}`);
+  return { success: true };
+}
+
+/**
+ * Manually re-trigger AI Receptionist Agent provisioning.
+ */
+export async function retryProvisioning(clinicId: string) {
+  const supabase = await requireAdmin();
+
+  const { data: clinic, error: fetchError } = await supabase
+    .from("clinics")
+    .select("*")
+    .eq("id", clinicId)
+    .single();
+
+  if (fetchError || !clinic) return { error: "Clinic not found" };
+
+  const { provisionAiReceptionistAgent } = await import("@/lib/retell/provision");
+  const result = await provisionAiReceptionistAgent(clinic);
+
+  revalidatePath(`/admin/clients/${clinicId}`);
+
+  if (!result.success) return { error: result.error || "Provisioning failed" };
+  return { success: true };
+}
+
+/**
  * Move a clinic through its lifecycle:
  *   onboarding → pending_setup → active
  *   active/pending_setup → suspended (and back)
- *
- * Flipping to 'active' is the moment the clinic's dashboard starts
- * showing live data — at that point, agent_id should already be set
- * (the UI nudges the admin to do agent setup first, but doesn't
- * hard-block it, since some clinics may go live CRM-less initially).
  */
 export async function updateClinicStatus(clinicId: string, status: ClinicStatus) {
   const supabase = await requireAdmin();
