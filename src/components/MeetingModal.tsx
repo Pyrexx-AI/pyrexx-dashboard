@@ -48,8 +48,11 @@ export default function MeetingModal({ isOpen, onClose, meeting }: MeetingModalP
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { onClose(); return; }
       if (e.key !== "Tab") return;
+      
       const panel = panelRef.current; if (!panel) return;
       const nodes = panel.querySelectorAll<HTMLElement>('button,[href],[tabindex]:not([tabindex="-1"])');
+      if (nodes.length === 0) return;
+      
       const first = nodes[0]; const last = nodes[nodes.length - 1];
       if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
       else            { if (document.activeElement === last)  { e.preventDefault(); first.focus(); } }

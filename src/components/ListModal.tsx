@@ -74,6 +74,8 @@ export default function ListModal({
       const focusable = panel.querySelectorAll<HTMLElement>(
         'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'
       );
+      if (focusable.length === 0) return;
+      
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (e.shiftKey) {
@@ -120,7 +122,6 @@ export default function ListModal({
               borderRadius: "1.5rem 1.5rem 0 0",
               border: "1px solid var(--border-subtle)",
               boxShadow: "var(--shadow-xl)",
-              /* NOT too tall — 62vh max so it doesn't fully obstruct the screen */
               maxHeight: "62vh",
             }}
             initial={{ y: 48, opacity: 0, scale: 0.98 }}
