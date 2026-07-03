@@ -11,7 +11,6 @@ interface DocumentSignerProps {
   onAllSignedChange: (signed: boolean) => void;
 }
 
-/** Very small markdown→HTML pass — headings and bold only, enough for the placeholder/real legal text structure. No external dep needed for this. */
 function renderMarkdown(md: string): string {
   return md
     .split("\n")
@@ -24,7 +23,7 @@ function renderMarkdown(md: string): string {
     .join("");
 }
 
-function DocumentCard({ doc, onScrolledToBottom }: { doc: LegalDocument; onScrolledToBottom: () => void }) {
+function DocumentCard({ doc, onAcknowledged }: { doc: LegalDocument; onAcknowledged: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [reachedBottom, setReachedBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -35,9 +34,17 @@ function DocumentCard({ doc, onScrolledToBottom }: { doc: LegalDocument; onScrol
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 12;
     if (atBottom && !reachedBottom) {
       setReachedBottom(true);
-      onScrolledToBottom();
+      onAcknowledged();
     }
-  }, [reachedBottom, onScrolledToBottom]);
+  }, [reachedBottom, onAcknowledged]);
+
+  const handleManualAcknowledge = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent accordion toggle
+    if (!reachedBottom) {
+      setReachedBottom(true);
+      onAcknowledged();
+    }
+  };
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
@@ -49,12 +56,22 @@ function DocumentCard({ doc, onScrolledToBottom }: { doc: LegalDocument; onScrol
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: reachedBottom ? "var(--success-surface)" : "var(--bg-card)" }}>
+          {/* Manually clickable acknowledge button */}
+          <button 
+            type="button"
+            onClick={handleManualAcknowledge}
+            title="Click to acknowledge"
+            className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors"
+            style={{ 
+              background: reachedBottom ? "var(--success-surface)" : "var(--bg-card)",
+              border: reachedBottom ? "none" : "1px solid var(--border-subtle)" 
+            }}
+          >
             {reachedBottom
               ? <CheckCircle2 size={14} style={{ color: "var(--success-text)" }} aria-hidden="true" />
               : <FileText size={14} style={{ color: "var(--text-muted)" }} aria-hidden="true" />}
-          </div>
+          </button>
+          
           <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{doc.title}</span>
         </div>
         <ChevronDown size={15} style={{ color: "var(--text-muted)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} aria-hidden="true" />
@@ -72,7 +89,7 @@ function DocumentCard({ doc, onScrolledToBottom }: { doc: LegalDocument; onScrol
 
       {!reachedBottom && (
         <p className="text-[10px] px-4 py-2" style={{ color: "var(--text-muted)", background: "var(--bg-card)" }}>
-          {expanded ? "Scroll to the bottom to acknowledge this document." : "Tap to review — you'll need to scroll through before continuing."}
+          {expanded ? "Scroll to the bottom or tap the document icon to acknowledge." : "Tap to review or tap the document icon to acknowledge directly."}
         </p>
       )}
     </div>
@@ -103,11 +120,11 @@ export default function DocumentSigner({
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[11px]" style={{ background: "var(--warning-surface)", color: "var(--warning-text)" }}>
         <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
-        <span>Review each document below — you must scroll through all of them before you can continue.</span>
+        <span>Review each document below — you must acknowledge all of them before you can continue.</span>
       </div>
 
       {LEGAL_DOCUMENTS.map((doc) => (
-        <DocumentCard key={doc.type} doc={doc} onScrolledToBottom={() => markRead(doc.type)} />
+        <DocumentCard key={doc.type} doc={doc} onAcknowledged={() => markRead(doc.type)} />
       ))}
 
       <div className="pt-1">
