@@ -1,87 +1,78 @@
 @import "tailwindcss";
 
 /* ─── Design Tokens ──────────────────────────────────────────────── */
-/* Light mode — soft pastel, clinical-modern, airy */
+/* Light mode — soft pastel, clinical-modern, airy, reduced glare */
 :root {
-  /* Surfaces */
-  --bg-base:          #F4F6FF;   /* barely-lavender canvas */
+  /* Surfaces - Softened to reduce glare */
+  --bg-base:          #F8FAFC;   
   --bg-card:          #FFFFFF;
   --bg-raised:        #FFFFFF;
-  --bg-sunken:        #F0F2FA;
+  --bg-sunken:        #F1F5F9;
 
   /* Borders */
-  --border-subtle:    rgba(100, 116, 139, 0.10);
-  --border-medium:    rgba(100, 116, 139, 0.18);
-  --border-strong:    rgba(100, 116, 139, 0.30);
+  --border-subtle:    rgba(100, 116, 139, 0.12);
+  --border-medium:    rgba(100, 116, 139, 0.20);
+  --border-strong:    rgba(100, 116, 139, 0.35);
 
-  /* Text */
-  --text-primary:     #111827;
-  --text-secondary:   #4B5563;
-  --text-muted:       #9CA3AF;
-  --text-placeholder: #CBD5E1;
+  /* Text - Darkened for higher contrast and readability */
+  --text-primary:     #0F172A;
+  --text-secondary:   #334155;
+  --text-muted:       #64748B;
+  --text-placeholder: #94A3B8;
 
   /* Brand */
   --teal:             #48C4C6;
   --purple:           #8952A5;
-  --teal-surface:     #EAF8F8;   /* pastel teal */
-  --purple-surface:   #F2EAFA;   /* pastel purple */
-  --teal-text:        #2B9496;
-  --purple-text:      #6B3D85;
+  --teal-surface:     #EAF8F8;   
+  --purple-surface:   #F2EAFA;   
+  --teal-text:        #217A7B;
+  --purple-text:      #5B3373;
 
   /* Semantic */
   --success-surface:  #ECFDF5;
-  --success-text:     #059669;
+  --success-text:     #047857;
   --warning-surface:  #FFFBEB;
-  --warning-text:     #D97706;
+  --warning-text:     #B45309;
   --error-surface:    #FEF2F2;
-  --error-text:       #DC2626;
+  --error-text:       #B91C1C;
   --info-surface:     #EFF6FF;
-  --info-text:        #2563EB;
+  --info-text:        #1D4ED8;
 
   /* Shadows */
-  --shadow-xs:    0 1px 2px rgba(17,24,39,0.04);
-  --shadow-sm:    0 1px 3px rgba(17,24,39,0.04), 0 4px 12px rgba(17,24,39,0.04);
-  --shadow-md:    0 4px 16px rgba(17,24,39,0.06), 0 1px 4px rgba(17,24,39,0.04);
-  --shadow-lg:    0 8px 32px rgba(17,24,39,0.08), 0 2px 8px rgba(17,24,39,0.04);
-  --shadow-xl:    0 16px 48px rgba(17,24,39,0.10), 0 4px 16px rgba(17,24,39,0.06);
-  --shadow-float: 0 20px 60px rgba(17,24,39,0.12), 0 6px 20px rgba(17,24,39,0.06);
+  --shadow-xs:    0 1px 2px rgba(15,23,42,0.04);
+  --shadow-sm:    0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.03);
+  --shadow-md:    0 4px 16px rgba(15,23,42,0.05), 0 1px 4px rgba(15,23,42,0.03);
+  --shadow-lg:    0 8px 32px rgba(15,23,42,0.06), 0 2px 8px rgba(15,23,42,0.03);
+  --shadow-xl:    0 16px 48px rgba(15,23,42,0.08), 0 4px 16px rgba(15,23,42,0.04);
+  --shadow-float: 0 20px 60px rgba(15,23,42,0.10), 0 6px 20px rgba(15,23,42,0.04);
 
   /* Toggle — light mode pill */
-  --toggle-bg:        #DDE1F0;
+  --toggle-bg:        #E2E8F0;
   --toggle-active-bg: #FFFFFF;
-  --toggle-active-fg: #F59E0B;  /* sun amber */
-  --toggle-inactive-fg: #94A3B8;
+  --toggle-active-fg: #D97706;  
+  --toggle-inactive-fg: #64748B;
 
-  /* Loading-animation logo colors — sampled from the official mark.
-     Outline = dark charcoal (matches the real logo on light surfaces).
-     Gap = the white/cream cutout color between ribbons. */
-  --logo-outline: #211C2E;
+  /* Loading-animation logo colors */
+  --logo-outline: #1E293B;
   --logo-gap:     #FFFFFF;
 
   color-scheme: light;
 }
 
 /* Dark mode */
-/*
-  REDESIGNED — previous dark theme (#0D0818 base / #160B24 cards) read
-  as near-black and crushed contrast between surfaces. New palette is
-  a lighter "midnight slate-purple": surfaces sit ~8-10% lighter, with
-  more visible borders and brighter secondary text, while keeping the
-  same brand-purple undertone.
-*/
 html.dark {
-  --bg-base:          #1A1626;   /* was #0D0818 — lighter charcoal-purple canvas */
-  --bg-card:          #251F38;   /* was #160B24 */
-  --bg-raised:        #302849;   /* was #1E0F30 */
-  --bg-sunken:        #150F20;   /* was #0A0514 */
+  --bg-base:          #1A1626;   
+  --bg-card:          #251F38;   
+  --bg-raised:        #302849;   
+  --bg-sunken:        #150F20;   
 
   --border-subtle:    rgba(176, 145, 214, 0.14);
   --border-medium:    rgba(176, 145, 214, 0.24);
   --border-strong:    rgba(176, 145, 214, 0.42);
 
-  --text-primary:     #F5F3FA;   /* brighter than #F1F5F9 for better contrast */
-  --text-secondary:   #ADA3C4;   /* was #94A3B8 — warmer + lighter */
-  --text-muted:       #7E7396;   /* was #64748B */
+  --text-primary:     #F5F3FA;   
+  --text-secondary:   #ADA3C4;   
+  --text-muted:       #7E7396;   
   --text-placeholder: #443B5C;
 
   --teal-surface:     rgba(72, 196, 198, 0.13);
@@ -107,25 +98,20 @@ html.dark {
 
   --toggle-bg:        #150F20;
   --toggle-active-bg: #302849;
-  --toggle-active-fg: #A78CF0;  /* moon indigo — slightly brighter on lighter bg */
+  --toggle-active-fg: #A78CF0;  
   --toggle-inactive-fg: #5E5478;
 
-  /* Loading-animation logo colors for dark mode — outline becomes a
-     soft muted lavender-gray (visible but gentle against the lighter
-     dark base), gap stays a soft off-white for a subtle glow. */
   --logo-outline: #564A78;
   --logo-gap:     #F4F1FA;
 
   color-scheme: dark;
 }
 
-/* ─── Tailwind v4 Theme Registration ────────────────────────────── */
 @theme inline {
   --color-background: var(--bg-base);
   --color-foreground: var(--text-primary);
   --color-card:       var(--bg-card);
 
-  /* Pyrexx brand */
   --color-pyrexx-blue:    #48C4C6;
   --color-pyrexx-purple:  #8952A5;
   --color-pyrexx-darkBg:  #1A1626;
@@ -135,7 +121,6 @@ html.dark {
   --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
 }
 
-/* ─── Base Styles ────────────────────────────────────────────────── */
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
@@ -143,12 +128,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Dashboard dot-grid background (light only) ─────────────────── */
 .dashboard-bg {
   background-color: var(--bg-base);
   background-image: radial-gradient(
     circle,
-    rgba(100, 116, 139, 0.10) 1px,
+    rgba(100, 116, 139, 0.12) 1px,
     transparent 1px
   );
   background-size: 24px 24px;
@@ -156,12 +140,11 @@ body {
 html.dark .dashboard-bg {
   background-image: radial-gradient(
     circle,
-    rgba(137, 82, 165, 0.06) 1px,
+    rgba(137, 82, 165, 0.08) 1px,
     transparent 1px
   );
 }
 
-/* ─── Card base ──────────────────────────────────────────────────── */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -174,14 +157,13 @@ html.dark .dashboard-bg {
   transform: translateY(-1px);
 }
 
-/* ─── Toggle pill ─────────────────────────────────────────────────── */
 .theme-toggle-pill {
   display: flex;
   align-items: center;
   padding: 3px;
   border-radius: 9999px;
   background: var(--toggle-bg);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.10), inset 0 1px 2px rgba(0,0,0,0.07);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06), inset 0 1px 2px rgba(0,0,0,0.04);
 }
 html.dark .theme-toggle-pill {
   box-shadow: inset 0 2px 6px rgba(0,0,0,0.40), inset 0 1px 3px rgba(0,0,0,0.30);
@@ -203,10 +185,9 @@ html.dark .theme-toggle-pill {
 .theme-toggle-btn.active {
   background: var(--toggle-active-bg);
   color: var(--toggle-active-fg);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04);
 }
 
-/* ─── Status badges ──────────────────────────────────────────────── */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -219,7 +200,6 @@ html.dark .theme-toggle-pill {
   white-space: nowrap;
 }
 
-/* ─── Scrollbar ─────────────────────────────────────────────────── */
 .custom-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--border-medium) transparent;
@@ -231,14 +211,12 @@ html.dark .theme-toggle-pill {
   border-radius: 9999px;
 }
 
-/* ─── Focus visible ──────────────────────────────────────────────── */
 :focus-visible {
   outline: 2px solid #48C4C6;
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-/* ─── Reduced motion ─────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -247,9 +225,5 @@ html.dark .theme-toggle-pill {
   }
 }
 
-/* ─── Touch optimisation ─────────────────────────────────────────── */
-button, [role="button"] {
-  touch-action: manipulation;
-}
-
+button, [role="button"] { touch-action: manipulation; }
 html { scroll-behavior: smooth; }
