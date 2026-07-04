@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import {
   Building2, Globe, Phone, Mail, Bot, Database,
   CheckCircle2, Clock, AlertTriangle, Save, Loader2,
-  ShieldAlert, RefreshCw, Zap, PhoneForwarded,
+  ShieldAlert, RefreshCw, Zap, PhoneForwarded, Trash2
 } from "lucide-react";
 import {
   updateAgentConnection,
@@ -12,6 +12,7 @@ import {
   updateClinicStatus,
   updateEscalationNumber,
   retryProvisioning,
+  disconnectAgent
 } from "@/app/admin/actions";
 import type { Database as DB, ClinicStatus } from "@/types/database";
 
@@ -104,6 +105,19 @@ export default function ClientSetupForm({
       const res = await updateAgentConnection(clinic.id, { agentId, agentPhoneNumber: agentPhone });
       if ("error" in res) flash(res.error || "Save failed", true);
       else flash("Agent connection saved");
+    });
+  }
+
+  function handleAgentDisconnect() {
+    if (!confirm("Are you sure you want to disconnect this agent? Live calls to the shadow number will fail immediately.")) return;
+    startTransition(async () => {
+      const res = await disconnectAgent(clinic.id);
+      if ("error" in res) flash(res.error || "Failed to disconnect", true);
+      else { 
+        flash("Agent disconnected successfully"); 
+        setAgentId(""); 
+        setAgentPhone(""); 
+      }
     });
   }
 
@@ -212,8 +226,6 @@ export default function ClientSetupForm({
 
       {/* AI Receptionist Agent provisioning */}
       <Section icon={Bot} iconBg="var(--purple-surface)" iconColor="var(--purple)" title="AI Receptionist Agent">
-
-        {/* Provisioning status badge */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>Auto-provisioning status</span>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
@@ -238,9 +250,8 @@ export default function ClientSetupForm({
           </button>
         )}
 
-        {/* Manual override (or post-provisioning verification) */}
         <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-          Override or verify the auto-provisioned agent details:
+          Override, verify, or disconnect the auto-provisioned agent details:
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Agent ID" icon={Bot}>
@@ -257,19 +268,30 @@ export default function ClientSetupForm({
           Clinic ID (for agent metadata): <code className="font-mono" style={{ color: "var(--text-secondary)" }}>{clinic.id}</code>
         </div>
 
-        <button type="button" onClick={handleAgentSave} disabled={isPending}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
-          style={{ background: "var(--teal)", color: "#fff" }}>
-          {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
-          Save Agent Details
-        </button>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <button type="button" onClick={handleAgentSave} disabled={isPending}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60"
+            style={{ background: "var(--teal)", color: "#fff" }}>
+            {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
+            Save Details
+          </button>
+
+          {clinic.agent_id && (
+            <button type="button" onClick={handleAgentDisconnect} disabled={isPending}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60"
+              style={{ background: "var(--error-surface)", color: "var(--error-text)" }}>
+              {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
+              Disconnect Agent
+            </button>
+          )}
+        </div>
       </Section>
 
       {/* Escalation / transfer target */}
       <Section icon={PhoneForwarded} iconBg="var(--warning-surface)" iconColor="var(--warning-text)" title="Escalation Phone Number">
         <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
           The back-line or staff cell the AI hands urgent calls off to — <strong>not</strong> the clinic's main line.
-          Using the main line risks a forwarding loop under the CCF shadow-number setup (calls forward back to the agent indefinitely). Set this before the agent goes live.
+          Using the main line risks a forwarding loop under the CCF shadow-number setup. Set this before the agent goes live.
         </p>
         <Field label="Escalation Number" icon={PhoneForwarded}>
           <input className={inputClass} style={inputStyle} value={escalation}
