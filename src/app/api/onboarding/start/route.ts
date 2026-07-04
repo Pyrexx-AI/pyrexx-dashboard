@@ -1,37 +1,6 @@
-/**
- * POST /api/onboarding/start
- * ───────────────────────────────────────────────────────────────
- * First of three onboarding API calls (start → checkout → finish).
- * Called the moment the wizard's Document Review & Sign step is
- * completed — BEFORE payment, BEFORE account creation.
- *
- * WHY CREATE THE CLINIC ROW THIS EARLY (before payment/signup)?
- * This is the resolution to the central grey area in this flow: the
- * user-visible order is "view & sign documents → pay → sign up →
- * see dashboard", but Dodo's checkout session needs a real clinic_id
- * in its metadata to route the eventual webhook back to (see
- * api/webhooks/dodo/route.ts). If we waited until AFTER payment to
- * create any database record, a successful payment with a lost
- * browser session (tab closed, network blip) would have nowhere to
- * land — an unrecoverable "paid but no account" state.
- *
- * By creating the clinic row here, BEFORE payment, the payment step
- * always has a stable target. The auth login (email + password) is
- * still created LAST, in /api/onboarding/finish, matching the
- * requested UX order where "signup" is the final step before the
- * dashboard.
- *
- * TRADE-OFF, DISCLOSED: this does mean a visitor who reaches the
- * Documents step but abandons before paying leaves behind an orphaned
- * `clinics` row (status: 'onboarding', no attached user, no
- * subscription). This is intentional and low-cost — it's just a
- * row sitting in the admin's "Needs Setup" queue. See
- * AI_RECEPTIONIST_INTEGRATION.md "Grey areas" for the recommended
- * cleanup approach (a scheduled job removing onboarding-status
- * clinics with no signed_agreements/payment after N days).
- */
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getPlan } from "@/lib/plans";
 import type { CrmProvider, PlanTier } from "@/types/database";
 
 interface SignedDoc {
@@ -79,6 +48,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createAdminClient();
+  const plan = getPlan(planTier); // Fetch plan details to get the price
 
   const { data: clinic, error: clinicError } = await supabase
     .from("clinics")
@@ -91,22 +61,28 @@ export async function POST(req: NextRequest) {
       crm_other_name: crmProvider === "other" ? crmOtherName?.trim() || null : null,
       receptionist_name: receptionistName.trim(),
       plan_tier: planTier,
+      plan_price_cents: plan?.priceCents || 0, // Prevent NOT NULL Postgres errors
       status: "onboarding",
     })
     .select("id")
     .single();
 
   if (clinicError || !clinic) {
-    console.error("Failed to create clinic:", clinicError);
-    return NextResponse.json({ error: "Could not create clinic record. Please try again." }, { status: 500 });
+    console.error("Failed to create clinic in DB:", clinicError);
+
+    // Postgres Code 23505 = Unique Violation (e.g., duplicate email during testing)
+    if (clinicError?.code === "23505") {
+      return NextResponse.json({ 
+        error: "An account or clinic with this email already exists." 
+      }, { status: 409 });
+    }
+
+    return NextResponse.json({ 
+      error: "Could not create clinic record. Please try again." 
+    }, { status: 500 });
   }
 
-  // Record each signed document. Done as a separate insert (not part
-  // of the clinics insert) so a failure here doesn't block the
-  // clinic from existing — we'd rather have a clinic with a logging
-  // gap than no clinic at all. Failures are logged, not surfaced to
-  // the user as a hard error, since the wizard's UI already required
-  // scroll-to-bottom + typed name before allowing this submit.
+  // Record each signed document. 
   const agreementRows = signedDocuments.map((doc) => ({
     clinic_id: clinic.id,
     document_type: doc.documentType,
