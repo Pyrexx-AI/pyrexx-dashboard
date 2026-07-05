@@ -17,6 +17,7 @@ import LogoMark from "./LogoMark";
 import AnalyticsPanel from "./AnalyticsPanel";
 import ProfilePanel from "./ProfilePanel";
 import { createClient } from "@/lib/supabase/client";
+import ThemeToggle from "./ui/ThemeToggle";
 
 const containerV: Variants = {
   hidden: { opacity: 0 },
@@ -188,30 +189,27 @@ export default function DashboardHome() {
   return (
     <div className="min-h-screen font-sans dashboard-bg">
       <motion.header
-        className="sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 flex items-center gap-3"
-        style={{
-          background: isDark ? "rgba(13,8,24,0.80)" : "rgba(248,250,252,0.80)",
-          backdropFilter: "blur(16px)",
-          borderBottom: "1px solid var(--border-subtle)",
-        }}
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <LogoMark size={36} />
-          <div>
-            <h1 className="text-base md:text-lg font-extrabold leading-tight tracking-tight" style={{ color: "var(--text-primary)" }}><span style={{ color: "var(--teal)" }}>Pyrexx</span> AI</h1>
-            <p className="text-[10px] hidden sm:block font-medium leading-tight" style={{ color: "var(--text-muted)" }}>AI Receptionist</p>
-          </div>
-        </div>
-        <div className="flex-1" />
-        {mounted && (
-          <div className="theme-toggle-pill flex-shrink-0">
-            <button type="button" onClick={() => setTheme("light")} className={`theme-toggle-btn${!isDark ? " active" : ""}`}><Sun size={14} /><span className="hidden sm:inline">Light</span></button>
-            <button type="button" onClick={() => setTheme("dark")} className={`theme-toggle-btn${isDark ? " active" : ""}`}><Moon size={14} /><span className="hidden sm:inline">Dark</span></button>
-          </div>
-        )}
-      </motion.header>
+				className="sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 flex items-center gap-3"
+				style={{
+					background: isDark ? "rgba(13,8,24,0.80)" : "rgba(248,250,252,0.80)",
+					backdropFilter: "blur(16px)",
+					borderBottom: "1px solid var(--border-subtle)",
+				}}
+				initial={{ opacity: 0, y: -8 }}
+				animate={{ opacity: 1, y: 0 }}
+			>
+				<div className="flex items-center gap-2.5 flex-shrink-0">
+					<LogoMark size={36} />
+					<div>
+						<h1 className="text-base md:text-lg font-extrabold leading-tight tracking-tight" style={{ color: "var(--text-primary)" }}>
+							<span style={{ color: "var(--teal)" }}>Pyrexx</span> AI
+						</h1>
+						<p className="text-[10px] hidden sm:block font-medium leading-tight" style={{ color: "var(--text-muted)" }}>AI Receptionist</p>
+					</div>
+				</div>
+				<div className="flex-1" />
+				<ThemeToggle />
+			</motion.header>
 
       <main id={`${tabPanelId}-panel`} className="px-4 md:px-8 pt-5 pb-28">
         <AnimatePresence mode="wait">
