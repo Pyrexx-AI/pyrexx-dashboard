@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { CheckCircle2, FileText, ChevronDown, AlertTriangle } from "lucide-react";
-import { LEGAL_DOCUMENTS, type LegalDocument } from "@/lib/legal-docs";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { CheckCircle2, FileText, ChevronDown, AlertTriangle, Loader2 } from "lucide-react";
+import { getLegalDocuments, type LegalDocument } from "@/lib/legal-docs";
 
 interface DocumentSignerProps {
   signerName: string;
@@ -15,9 +15,15 @@ function renderMarkdown(md: string): string {
   return md
     .split("\n")
     .map((line) => {
-      if (line.startsWith("# ")) return `<h2 class="text-base font-bold mb-2">${line.slice(2)}</h2>`;
-      if (line.trim() === "") return "<br/>";
-      const bolded = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      const trimmed = line.trim();
+      if (trimmed.startsWith("# ")) return `<h2 class="text-base font-bold mb-2 text-teal-600 dark:text-teal-400">${trimmed.slice(2)}</h2>`;
+      if (trimmed.startsWith("## ")) return `<h3 class="text-sm font-bold mt-3 mb-1 text-gray-900 dark:text-white">${trimmed.slice(3)}</h3>`;
+      if (trimmed.startsWith("### ")) return `<h4 class="text-xs font-bold mt-2 mb-1 text-gray-800 dark:text-gray-200">${trimmed.slice(4)}</h4>`;
+      if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) return `<li class="text-xs leading-relaxed ml-4 list-disc mb-1">${trimmed.slice(2)}</li>`;
+      if (trimmed === "---" || trimmed === "***") return `<hr class="my-3 border-gray-200 dark:border-gray-800"/>`;
+      if (trimmed === "") return "<br/>";
+
+      const bolded = trimmed.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
       return `<p class="text-xs leading-relaxed mb-2">${bolded}</p>`;
     })
     .join("");
@@ -39,7 +45,7 @@ function DocumentCard({ doc, onAcknowledged }: { doc: LegalDocument; onAcknowled
   }, [reachedBottom, onAcknowledged]);
 
   const handleManualAcknowledge = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent accordion toggle
+    e.stopPropagation();
     if (!reachedBottom) {
       setReachedBottom(true);
       onAcknowledged();
@@ -56,7 +62,6 @@ function DocumentCard({ doc, onAcknowledged }: { doc: LegalDocument; onAcknowled
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          {/* Manually clickable acknowledge button */}
           <button 
             type="button"
             onClick={handleManualAcknowledge}
@@ -72,7 +77,10 @@ function DocumentCard({ doc, onAcknowledged }: { doc: LegalDocument; onAcknowled
               : <FileText size={14} style={{ color: "var(--text-muted)" }} aria-hidden="true" />}
           </button>
           
-          <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{doc.title}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{doc.title}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: "var(--bg-card)", color: "var(--text-muted)" }}>{doc.version}</span>
+          </div>
         </div>
         <ChevronDown size={15} style={{ color: "var(--text-muted)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} aria-hidden="true" />
       </button>
@@ -99,12 +107,24 @@ function DocumentCard({ doc, onAcknowledged }: { doc: LegalDocument; onAcknowled
 export default function DocumentSigner({
   signerName, onSignerNameChange, allSigned, onAllSignedChange,
 }: DocumentSignerProps) {
+  const [documents, setDocuments] = useState<LegalDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
   const [readSet, setReadSet] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    async function loadDocs() {
+      setLoadingDocs(true);
+      const docs = await getLegalDocuments();
+      setDocuments(docs);
+      setLoadingDocs(false);
+    }
+    loadDocs();
+  }, []);
 
   const markRead = (type: string) => {
     setReadSet((prev) => {
       const next = new Set(prev).add(type);
-      const allRead = next.size === LEGAL_DOCUMENTS.length;
+      const allRead = next.size === documents.length;
       onAllSignedChange(allRead && signerName.trim().length > 1);
       return next;
     });
@@ -112,8 +132,17 @@ export default function DocumentSigner({
 
   function handleNameChange(name: string) {
     onSignerNameChange(name);
-    const allRead = readSet.size === LEGAL_DOCUMENTS.length;
+    const allRead = readSet.size === documents.length;
     onAllSignedChange(allRead && name.trim().length > 1);
+  }
+
+  if (loadingDocs) {
+    return (
+      <div className="py-8 flex flex-col items-center justify-center gap-2">
+        <Loader2 size={20} className="animate-spin" style={{ color: "var(--teal)" }} />
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading active agreements...</p>
+      </div>
+    );
   }
 
   return (
@@ -123,7 +152,7 @@ export default function DocumentSigner({
         <span>Review each document below — you must acknowledge all of them before you can continue.</span>
       </div>
 
-      {LEGAL_DOCUMENTS.map((doc) => (
+      {documents.map((doc) => (
         <DocumentCard key={doc.type} doc={doc} onAcknowledged={() => markRead(doc.type)} />
       ))}
 
@@ -140,7 +169,7 @@ export default function DocumentSigner({
           style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
         />
         <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>
-          By typing your name above, you're electronically signing all {LEGAL_DOCUMENTS.length} documents reviewed above, dated to today.
+          By typing your name above, you're electronically signing all {documents.length} documents reviewed above, dated to today.
         </p>
       </div>
 

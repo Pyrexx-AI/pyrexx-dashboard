@@ -7,13 +7,50 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      legal_documents: {
+        Row: {
+          content_markdown: string
+          created_at: string
+          file_type: string | null
+          file_url: string | null
+          id: string
+          is_active: boolean
+          title: string
+          type: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          content_markdown: string
+          created_at?: string
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          is_active?: boolean
+          title: string
+          type: string
+          updated_at?: string
+          version?: string
+        }
+        Update: {
+          content_markdown?: string
+          created_at?: string
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          is_active?: boolean
+          title?: string
+          type?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
       call_records: {
         Row: {
           booking_time: string | null
@@ -80,8 +117,8 @@ export type Database = {
         Row: {
           agent_id: string | null
           agent_phone_number: string | null
-          agent_provisioning_status: Database["public"]["Enums"]["provisioning_status"]
           agent_provisioning_error: string | null
+          agent_provisioning_status: Database["public"]["Enums"]["provisioning_status"]
           contact_email: string
           created_at: string
           crm_other_name: string | null
@@ -106,8 +143,8 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           agent_phone_number?: string | null
-          agent_provisioning_status?: Database["public"]["Enums"]["provisioning_status"]
           agent_provisioning_error?: string | null
+          agent_provisioning_status?: Database["public"]["Enums"]["provisioning_status"]
           contact_email: string
           created_at?: string
           crm_other_name?: string | null
@@ -132,8 +169,8 @@ export type Database = {
         Update: {
           agent_id?: string | null
           agent_phone_number?: string | null
-          agent_provisioning_status?: Database["public"]["Enums"]["provisioning_status"]
           agent_provisioning_error?: string | null
+          agent_provisioning_status?: Database["public"]["Enums"]["provisioning_status"]
           contact_email?: string
           created_at?: string
           crm_other_name?: string | null
@@ -226,34 +263,34 @@ export type Database = {
       }
       signed_agreements: {
         Row: {
-          id: string
           clinic_id: string
           document_type: string
           document_version: string
-          signer_name: string
-          signer_title: string | null
+          id: string
           ip_address: string | null
           signed_at: string
+          signer_name: string
+          signer_title: string | null
         }
         Insert: {
-          id?: string
           clinic_id: string
           document_type: string
           document_version: string
-          signer_name: string
-          signer_title?: string | null
+          id?: string
           ip_address?: string | null
           signed_at?: string
+          signer_name: string
+          signer_title?: string | null
         }
         Update: {
-          id?: string
           clinic_id?: string
           document_type?: string
           document_version?: string
-          signer_name?: string
-          signer_title?: string | null
+          id?: string
           ip_address?: string | null
           signed_at?: string
+          signer_name?: string
+          signer_title?: string | null
         }
         Relationships: [
           {
@@ -285,6 +322,8 @@ export type Database = {
         | "hubspot"
         | "other"
         | "none"
+      plan_tier: "overflow" | "full_time" | "usage_based"
+      provisioning_status: "pending" | "provisioning" | "provisioned" | "failed"
       subscription_status:
         | "trialing"
         | "active"
@@ -292,8 +331,6 @@ export type Database = {
         | "canceled"
         | "incomplete"
       user_role: "admin" | "owner" | "staff"
-      plan_tier: "overflow" | "full_time" | "usage_based"
-      provisioning_status: "pending" | "provisioning" | "provisioned" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -333,119 +370,6 @@ export type Tables<
       ? R
       : never
     : never
-
-export type TablesInsert<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
-
-export type TablesUpdate<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
-
-export type Enums<
-  DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
-
-export const Constants = {
-  public: {
-    Enums: {
-      clinic_status: ["onboarding", "pending_setup", "active", "suspended"],
-      crm_provider: [
-        "jane",
-        "cliniko",
-        "mindbody",
-        "vagaro",
-        "acuity",
-        "square_appointments",
-        "hubspot",
-        "other",
-        "none",
-      ],
-      subscription_status: [
-        "trialing",
-        "active",
-        "past_due",
-        "canceled",
-        "incomplete",
-      ],
-      user_role: ["admin", "owner", "staff"],
-      plan_tier: ["overflow", "full_time", "usage_based"],
-      provisioning_status: ["pending", "provisioning", "provisioned", "failed"],
-    },
-  },
-} as const
 
 export type ClinicStatus = Database["public"]["Enums"]["clinic_status"];
 export type CrmProvider = Database["public"]["Enums"]["crm_provider"];

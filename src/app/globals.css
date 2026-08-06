@@ -1,26 +1,21 @@
 @import "tailwindcss";
 
 /* ─── Design Tokens ──────────────────────────────────────────────── */
-/* Light mode — soft pastel, clinical-modern, airy, reduced glare */
 :root {
-  /* Surfaces - Softened to reduce glare */
   --bg-base:          #F8FAFC;   
   --bg-card:          #FFFFFF;
   --bg-raised:        #FFFFFF;
   --bg-sunken:        #F1F5F9;
 
-  /* Borders */
   --border-subtle:    rgba(100, 116, 139, 0.12);
   --border-medium:    rgba(100, 116, 139, 0.20);
   --border-strong:    rgba(100, 116, 139, 0.35);
 
-  /* Text - Darkened for higher contrast and readability */
   --text-primary:     #0F172A;
   --text-secondary:   #334155;
   --text-muted:       #64748B;
   --text-placeholder: #94A3B8;
 
-  /* Brand */
   --teal:             #48C4C6;
   --purple:           #8952A5;
   --teal-surface:     #EAF8F8;   
@@ -28,7 +23,6 @@
   --teal-text:        #217A7B;
   --purple-text:      #5B3373;
 
-  /* Semantic */
   --success-surface:  #ECFDF5;
   --success-text:     #047857;
   --warning-surface:  #FFFBEB;
@@ -38,7 +32,6 @@
   --info-surface:     #EFF6FF;
   --info-text:        #1D4ED8;
 
-  /* Shadows */
   --shadow-xs:    0 1px 2px rgba(15,23,42,0.04);
   --shadow-sm:    0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.03);
   --shadow-md:    0 4px 16px rgba(15,23,42,0.05), 0 1px 4px rgba(15,23,42,0.03);
@@ -46,20 +39,17 @@
   --shadow-xl:    0 16px 48px rgba(15,23,42,0.08), 0 4px 16px rgba(15,23,42,0.04);
   --shadow-float: 0 20px 60px rgba(15,23,42,0.10), 0 6px 20px rgba(15,23,42,0.04);
 
-  /* Toggle — light mode pill */
   --toggle-bg:        #E2E8F0;
   --toggle-active-bg: #FFFFFF;
   --toggle-active-fg: #D97706;  
   --toggle-inactive-fg: #64748B;
 
-  /* Loading-animation logo colors */
   --logo-outline: #1E293B;
   --logo-gap:     #FFFFFF;
 
   color-scheme: light;
 }
 
-/* Dark mode */
 html.dark {
   --bg-base:          #1A1626;   
   --bg-card:          #251F38;   
@@ -126,6 +116,9 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Smooth, non-jarring color transitions across dark/light mode toggles */
+  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dashboard-bg {
@@ -150,7 +143,9 @@ html.dark .dashboard-bg {
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
   border-radius: 1.25rem;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.2s ease, transform 0.2s ease;
 }
 .card-hover:hover {
   box-shadow: var(--shadow-md);
@@ -164,10 +159,9 @@ html.dark .dashboard-bg {
   border-radius: 9999px;
   background: var(--toggle-bg);
   box-shadow: inset 0 2px 4px rgba(0,0,0,0.06), inset 0 1px 2px rgba(0,0,0,0.04);
+  transition: background-color 0.35s ease;
 }
-html.dark .theme-toggle-pill {
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.40), inset 0 1px 3px rgba(0,0,0,0.30);
-}
+
 .theme-toggle-btn {
   display: flex;
   align-items: center;
