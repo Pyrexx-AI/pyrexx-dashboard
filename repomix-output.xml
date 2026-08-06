@@ -67,6 +67,7 @@ src/app/api/onboarding/checkout/route.ts
 src/app/api/onboarding/finish/route.ts
 src/app/api/onboarding/route.ts
 src/app/api/onboarding/start/route.ts
+src/app/api/onboarding/status/route.ts
 src/app/api/webhooks/dodo/route.ts
 src/app/api/webhooks/retell/route.ts
 src/app/auth/callback/route.ts
@@ -78,6 +79,7 @@ src/app/page.tsx
 src/app/signup/finish/FinishClient.tsx
 src/app/signup/finish/page.tsx
 src/app/signup/page.tsx
+src/components/admin/AdminDashboardClient.tsx
 src/components/admin/AdminSignOutButton.tsx
 src/components/admin/ClientSetupForm.tsx
 src/components/AnalyticsPanel.tsx
@@ -95,7 +97,9 @@ src/components/onboarding/OnboardingWizard.tsx
 src/components/onboarding/PlanSelector.tsx
 src/components/ProfilePanel.tsx
 src/components/Switch.tsx
+src/components/ThemeProvider.tsx
 src/components/ui/Switch.tsx
+src/components/ui/ThemeToggle.tsx
 src/lib/dodo/client.ts
 src/lib/dodo/verify-signature.ts
 src/lib/legal-docs/index.ts
@@ -262,222 +266,6 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-</file>
-
-<file path="src/app/admin/clients/[id]/page.tsx">
-import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
-import {
-  Building2, Clock, CheckCircle2, AlertTriangle,
-  ArrowRight, Bot, Database,
-} from "lucide-react";
-import type { Database as DB, ClinicStatus } from "@/types/database";
-
-type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
-
-const STATUS_CONFIG: Record<ClinicStatus, { label: string; bg: string; color: string; icon: React.ElementType }> = {
-  onboarding:    { label: "New Signup",    bg: "var(--info-surface)",    color: "var(--info-text)",    icon: Clock },
-  pending_setup: { label: "Pending Setup", bg: "var(--warning-surface)", color: "var(--warning-text)", icon: AlertTriangle },
-  active:        { label: "Active",        bg: "var(--success-surface)", color: "var(--success-text)", icon: CheckCircle2 },
-  suspended:     { label: "Suspended",     bg: "var(--error-surface)",   color: "var(--error-text)",   icon: AlertTriangle },
-};
-
-const CRM_LABELS: Record<string, string> = {
-  jane: "Jane App", cliniko: "Cliniko", mindbody: "Mindbody", vagaro: "Vagaro",
-  acuity: "Acuity", square_appointments: "Square Appointments", hubspot: "HubSpot",
-  other: "Other", none: "None",
-};
-
-export const metadata = { title: "Clients | Pyrexx Admin" };
-
-export default async function AdminClientsPage() {
-  const supabase = await createClient();
-  const { data: clinics } = await supabase
-    .from("clinics")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  const all = (clinics ?? []) as Clinic[];
-  const needsAttention = all.filter((c) => c.status === "onboarding" || c.status === "pending_setup");
-  const others = all.filter((c) => c.status === "active" || c.status === "suspended");
-
-  return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto">
-      <div>
-        <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Clients</h2>
-        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-          {all.length} total · {needsAttention.length} need setup
-        </p>
-      </div>
-
-      {/* Setup queue — highlighted */}
-      {needsAttention.length > 0 && (
-        <section>
-          <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: "var(--warning-text)" }}>
-            Needs Setup
-          </h3>
-          <div className="flex flex-col gap-2">
-            {needsAttention.map((clinic) => (
-              <ClinicRow key={clinic.id} clinic={clinic} highlighted />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* All other clients */}
-      <section>
-        <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-          All Clients
-        </h3>
-        {others.length === 0 && needsAttention.length === 0 ? (
-          <div className="card p-8 text-center">
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>No clients yet.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {others.map((clinic) => (
-              <ClinicRow key={clinic.id} clinic={clinic} />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function ClinicRow({ clinic, highlighted = false }: { clinic: Clinic; highlighted?: boolean }) {
-  const status = STATUS_CONFIG[clinic.status];
-  const StatusIcon = status.icon;
-  const hasAgent = !!clinic.agent_id;
-  const hasCrm = clinic.crm_provider !== "none";
-
-  return (
-    <Link
-      href={`/admin/clients/${clinic.id}`}
-      className="card card-hover flex items-center gap-3 p-4 cursor-pointer"
-      style={highlighted ? { borderColor: "var(--warning-text)", borderWidth: 1 } : undefined}
-    >
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "var(--teal-surface)" }}>
-        <Building2 size={16} style={{ color: "var(--teal)" }} aria-hidden="true" />
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{clinic.name}</p>
-          <span className="badge text-[10px] flex-shrink-0" style={{ background: status.bg, color: status.color }}>
-            <StatusIcon size={9} aria-hidden="true" /> {status.label}
-          </span>
-        </div>
-        <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
-          {clinic.contact_email} · {clinic.phone_number}
-        </p>
-      </div>
-
-      {/* Setup indicators */}
-      <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-        <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-full"
-          style={{ background: hasAgent ? "var(--success-surface)" : "var(--bg-sunken)", color: hasAgent ? "var(--success-text)" : "var(--text-muted)" }}>
-          <Bot size={10} aria-hidden="true" /> Agent {hasAgent ? "✓" : "—"}
-        </span>
-        <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-full"
-          style={{ background: hasCrm ? "var(--success-surface)" : "var(--bg-sunken)", color: hasCrm ? "var(--success-text)" : "var(--text-muted)" }}>
-          <Database size={10} aria-hidden="true" /> {hasCrm ? CRM_LABELS[clinic.crm_provider] : "No CRM"}
-        </span>
-      </div>
-
-      <ArrowRight size={14} className="flex-shrink-0" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-    </Link>
-  );
-}
-</file>
-
-<file path="src/app/admin/layout.tsx">
-import LogoMark from "@/components/LogoMark";
-import AdminSignOutButton from "@/components/admin/AdminSignOutButton";
-
-export const metadata = { title: "Admin | Pyrexx AI" };
-
-/**
- * Admin shell — wraps every /admin/* page.
- * Access control happens in src/middleware.ts (role === 'admin'),
- * so this layout assumes the user is already verified.
- */
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen dashboard-bg">
-      <header
-        className="sticky top-0 z-30 px-4 md:px-8 py-3 flex items-center gap-3"
-        style={{
-          background: "var(--bg-base)",
-          backdropFilter: "blur(16px)",
-          borderBottom: "1px solid var(--border-subtle)",
-        }}
-      >
-        <a href="/admin" className="flex items-center gap-2.5 flex-shrink-0">
-          <LogoMark size={32} />
-          <div>
-            <h1 className="text-sm font-extrabold leading-tight" style={{ color: "var(--text-primary)" }}>
-              <span style={{ color: "var(--teal)" }}>Pyrexx</span> Admin
-            </h1>
-            <p className="text-[10px] hidden sm:block leading-tight" style={{ color: "var(--text-muted)" }}>
-              Agency control panel
-            </p>
-          </div>
-        </a>
-        <div className="flex-1" />
-        <AdminSignOutButton />
-      </header>
-      <main className="px-4 md:px-8 py-6">{children}</main>
-    </div>
-  );
-}
-</file>
-
-<file path="src/app/admin/page.tsx">
-import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import ClientSetupForm from "@/components/admin/ClientSetupForm";
-
-export const metadata = { title: "Client Setup | Pyrexx Admin" };
-
-export default async function AdminClientDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const supabase = await createClient();
-
-  const { data: clinic } = await supabase
-    .from("clinics")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (!clinic) notFound();
-
-  // Integration credentials are admin-only (RLS enforces this), so
-  // this select is safe — but only ever surface them on this admin
-  // page, never pass them to a client-facing component/route.
-  const { data: credentials } = await supabase
-    .from("integration_credentials")
-    .select("*")
-    .eq("clinic_id", id);
-
-  const crmCredential = credentials?.find((c) => c.provider === "crm") ?? null;
-
-  return (
-    <div className="flex flex-col gap-5 max-w-3xl mx-auto">
-      <Link href="/admin" className="flex items-center gap-1.5 text-xs font-semibold w-fit" style={{ color: "var(--text-muted)" }}>
-        <ArrowLeft size={13} aria-hidden="true" /> Back to clients
-      </Link>
-
-      <ClientSetupForm clinic={clinic} crmCredential={crmCredential} />
-    </div>
-  );
-}
 </file>
 
 <file path="src/app/api/dashboard/summary/route.ts">
@@ -780,134 +568,28 @@ export async function POST(req: NextRequest) {
 }
 </file>
 
-<file path="src/app/api/onboarding/start/route.ts">
-/**
- * POST /api/onboarding/start
- * ───────────────────────────────────────────────────────────────
- * First of three onboarding API calls (start → checkout → finish).
- * Called the moment the wizard's Document Review & Sign step is
- * completed — BEFORE payment, BEFORE account creation.
- *
- * WHY CREATE THE CLINIC ROW THIS EARLY (before payment/signup)?
- * This is the resolution to the central grey area in this flow: the
- * user-visible order is "view & sign documents → pay → sign up →
- * see dashboard", but Dodo's checkout session needs a real clinic_id
- * in its metadata to route the eventual webhook back to (see
- * api/webhooks/dodo/route.ts). If we waited until AFTER payment to
- * create any database record, a successful payment with a lost
- * browser session (tab closed, network blip) would have nowhere to
- * land — an unrecoverable "paid but no account" state.
- *
- * By creating the clinic row here, BEFORE payment, the payment step
- * always has a stable target. The auth login (email + password) is
- * still created LAST, in /api/onboarding/finish, matching the
- * requested UX order where "signup" is the final step before the
- * dashboard.
- *
- * TRADE-OFF, DISCLOSED: this does mean a visitor who reaches the
- * Documents step but abandons before paying leaves behind an orphaned
- * `clinics` row (status: 'onboarding', no attached user, no
- * subscription). This is intentional and low-cost — it's just a
- * row sitting in the admin's "Needs Setup" queue. See
- * AI_RECEPTIONIST_INTEGRATION.md "Grey areas" for the recommended
- * cleanup approach (a scheduled job removing onboarding-status
- * clinics with no signed_agreements/payment after N days).
- */
+<file path="src/app/api/onboarding/status/route.ts">
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import type { CrmProvider, PlanTier } from "@/types/database";
 
-interface SignedDoc {
-  documentType: string;
-  documentVersion: string;
-  signerName: string;
-  signerTitle?: string;
-}
-
-interface OnboardingStartBody {
-  clinicName: string;
-  website: string | null;
-  phoneNumber: string;
-  contactEmail: string;
-  crmProvider: CrmProvider;
-  crmOtherName: string | null;
-  receptionistName: string;
-  planTier: PlanTier;
-  signedDocuments: SignedDoc[];
-}
-
-export async function POST(req: NextRequest) {
-  let body: OnboardingStartBody;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
-  }
-
-  const {
-    clinicName, website, phoneNumber, contactEmail,
-    crmProvider, crmOtherName, receptionistName, planTier, signedDocuments,
-  } = body;
-
-  if (
-    !clinicName?.trim() || !phoneNumber?.trim() || !contactEmail?.trim() ||
-    !receptionistName?.trim() || !crmProvider || !planTier ||
-    !Array.isArray(signedDocuments) || signedDocuments.length === 0
-  ) {
-    return NextResponse.json({ error: "Missing or invalid required fields" }, { status: 400 });
-  }
-
-  if (planTier === "usage_based") {
-    return NextResponse.json({ error: "That plan isn't available yet" }, { status: 400 });
+export async function GET(req: NextRequest) {
+  const clinicId = req.nextUrl.searchParams.get("clinicId");
+  if (!clinicId) {
+    return NextResponse.json({ error: "Missing clinicId" }, { status: 400 });
   }
 
   const supabase = createAdminClient();
-
-  const { data: clinic, error: clinicError } = await supabase
+  const { data, error } = await supabase
     .from("clinics")
-    .insert({
-      name: clinicName.trim(),
-      website: website?.trim() || null,
-      phone_number: phoneNumber.trim(),
-      contact_email: contactEmail.trim().toLowerCase(),
-      crm_provider: crmProvider,
-      crm_other_name: crmProvider === "other" ? crmOtherName?.trim() || null : null,
-      receptionist_name: receptionistName.trim(),
-      plan_tier: planTier,
-      status: "onboarding",
-    })
-    .select("id")
+    .select("subscription_status")
+    .eq("id", clinicId)
     .single();
 
-  if (clinicError || !clinic) {
-    console.error("Failed to create clinic:", clinicError);
-    return NextResponse.json({ error: "Could not create clinic record. Please try again." }, { status: 500 });
+  if (error || !data) {
+    return NextResponse.json({ error: "Clinic not found" }, { status: 404 });
   }
 
-  // Record each signed document. Done as a separate insert (not part
-  // of the clinics insert) so a failure here doesn't block the
-  // clinic from existing — we'd rather have a clinic with a logging
-  // gap than no clinic at all. Failures are logged, not surfaced to
-  // the user as a hard error, since the wizard's UI already required
-  // scroll-to-bottom + typed name before allowing this submit.
-  const agreementRows = signedDocuments.map((doc) => ({
-    clinic_id: clinic.id,
-    document_type: doc.documentType,
-    document_version: doc.documentVersion,
-    signer_name: doc.signerName.trim(),
-    signer_title: doc.signerTitle?.trim() || null,
-    ip_address: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-  }));
-
-  const { error: agreementsError } = await supabase
-    .from("signed_agreements")
-    .insert(agreementRows);
-
-  if (agreementsError) {
-    console.error(`Failed to record signed_agreements for clinic ${clinic.id}:`, agreementsError);
-  }
-
-  return NextResponse.json({ success: true, clinicId: clinic.id });
+  return NextResponse.json({ status: data.subscription_status });
 }
 </file>
 
@@ -1689,146 +1371,6 @@ create trigger on_auth_user_created
 }
 </file>
 
-<file path="src/components/onboarding/DocumentSigner.tsx">
-"use client";
-
-import { useState, useRef, useCallback } from "react";
-import { CheckCircle2, FileText, ChevronDown, AlertTriangle } from "lucide-react";
-import { LEGAL_DOCUMENTS, type LegalDocument } from "@/lib/legal-docs";
-
-interface DocumentSignerProps {
-  signerName: string;
-  onSignerNameChange: (name: string) => void;
-  allSigned: boolean;
-  onAllSignedChange: (signed: boolean) => void;
-}
-
-/** Very small markdown→HTML pass — headings and bold only, enough for the placeholder/real legal text structure. No external dep needed for this. */
-function renderMarkdown(md: string): string {
-  return md
-    .split("\n")
-    .map((line) => {
-      if (line.startsWith("# ")) return `<h2 class="text-base font-bold mb-2">${line.slice(2)}</h2>`;
-      if (line.trim() === "") return "<br/>";
-      const bolded = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-      return `<p class="text-xs leading-relaxed mb-2">${bolded}</p>`;
-    })
-    .join("");
-}
-
-function DocumentCard({ doc, onScrolledToBottom }: { doc: LegalDocument; onScrolledToBottom: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const [reachedBottom, setReachedBottom] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 12;
-    if (atBottom && !reachedBottom) {
-      setReachedBottom(true);
-      onScrolledToBottom();
-    }
-  }, [reachedBottom, onScrolledToBottom]);
-
-  return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 cursor-pointer"
-        style={{ background: "var(--bg-sunken)" }}
-        aria-expanded={expanded}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: reachedBottom ? "var(--success-surface)" : "var(--bg-card)" }}>
-            {reachedBottom
-              ? <CheckCircle2 size={14} style={{ color: "var(--success-text)" }} aria-hidden="true" />
-              : <FileText size={14} style={{ color: "var(--text-muted)" }} aria-hidden="true" />}
-          </div>
-          <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{doc.title}</span>
-        </div>
-        <ChevronDown size={15} style={{ color: "var(--text-muted)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} aria-hidden="true" />
-      </button>
-
-      {expanded && (
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="px-4 py-3 overflow-y-auto custom-scroll"
-          style={{ maxHeight: 220, background: "var(--bg-card)" }}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(doc.content) }}
-        />
-      )}
-
-      {!reachedBottom && (
-        <p className="text-[10px] px-4 py-2" style={{ color: "var(--text-muted)", background: "var(--bg-card)" }}>
-          {expanded ? "Scroll to the bottom to acknowledge this document." : "Tap to review — you'll need to scroll through before continuing."}
-        </p>
-      )}
-    </div>
-  );
-}
-
-export default function DocumentSigner({
-  signerName, onSignerNameChange, allSigned, onAllSignedChange,
-}: DocumentSignerProps) {
-  const [readSet, setReadSet] = useState<Set<string>>(new Set());
-
-  const markRead = (type: string) => {
-    setReadSet((prev) => {
-      const next = new Set(prev).add(type);
-      const allRead = next.size === LEGAL_DOCUMENTS.length;
-      onAllSignedChange(allRead && signerName.trim().length > 1);
-      return next;
-    });
-  };
-
-  function handleNameChange(name: string) {
-    onSignerNameChange(name);
-    const allRead = readSet.size === LEGAL_DOCUMENTS.length;
-    onAllSignedChange(allRead && name.trim().length > 1);
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[11px]" style={{ background: "var(--warning-surface)", color: "var(--warning-text)" }}>
-        <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
-        <span>Review each document below — you must scroll through all of them before you can continue.</span>
-      </div>
-
-      {LEGAL_DOCUMENTS.map((doc) => (
-        <DocumentCard key={doc.type} doc={doc} onScrolledToBottom={() => markRead(doc.type)} />
-      ))}
-
-      <div className="pt-1">
-        <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
-          Type your full legal name to sign
-        </label>
-        <input
-          type="text"
-          value={signerName}
-          onChange={(e) => handleNameChange(e.target.value)}
-          placeholder="Jane A. Doe"
-          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-colors"
-          style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-        />
-        <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>
-          By typing your name above, you're electronically signing all {LEGAL_DOCUMENTS.length} documents reviewed above, dated to today.
-        </p>
-      </div>
-
-      {allSigned && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
-          <CheckCircle2 size={13} aria-hidden="true" /> All documents reviewed and signed
-        </div>
-      )}
-    </div>
-  );
-}
-</file>
-
 <file path="src/components/onboarding/EmbeddedCheckout.tsx">
 "use client";
 
@@ -2047,6 +1589,18 @@ export default function Switch({ checked, onChange, label, disabled = false }: S
 }
 </file>
 
+<file path="src/components/ThemeProvider.tsx">
+"use client";
+
+import * as React from "react";
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+import type { ThemeProviderProps } from "next-themes";
+
+export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+}
+</file>
+
 <file path="src/components/ui/Switch.tsx">
 "use client";
 
@@ -2090,6 +1644,53 @@ export default function Switch({ checked, onChange, label, disabled = false }: S
         transition={{ type: "spring", stiffness: 500, damping: 32 }}
       />
     </button>
+  );
+}
+</file>
+
+<file path="src/components/ui/ThemeToggle.tsx">
+"use client";
+
+import { useTheme } from "next-themes";
+import { Sun, Moon } from "lucide-react";
+import { useState, useEffect } from "react";
+
+export default function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  // Prevent hydration mismatch by rendering a placeholder of the exact same size
+  if (!mounted) {
+    return <div className="theme-toggle-pill w-[100px] h-[32px] opacity-0" aria-hidden="true" />;
+  }
+
+  const isDark = resolvedTheme === "dark";
+
+  return (
+    <div className="theme-toggle-pill flex-shrink-0" role="group" aria-label="Color theme">
+      <button
+        type="button"
+        onClick={() => setTheme("light")}
+        aria-label="Light mode"
+        aria-pressed={!isDark}
+        className={`theme-toggle-btn${!isDark ? " active" : ""}`}
+      >
+        <Sun size={14} aria-hidden="true" />
+        <span className="hidden sm:inline">Light</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setTheme("dark")}
+        aria-label="Dark mode"
+        aria-pressed={isDark}
+        className={`theme-toggle-btn${isDark ? " active" : ""}`}
+      >
+        <Moon size={14} aria-hidden="true" />
+        <span className="hidden sm:inline">Dark</span>
+      </button>
+    </div>
   );
 }
 </file>
@@ -2545,97 +2146,6 @@ export async function provisionAiReceptionistAgent(
 }
 </file>
 
-<file path="src/lib/retell/store.ts">
-/**
- * Call Record Store — storage abstraction
- * ───────────────────────────────────────────────────────────────
- * The webhook handler and dashboard data-fetching code depend on
- * this interface, not on a specific database. Swap the in-memory
- * implementation below for Postgres / Supabase / PlanetScale /
- * Prisma etc. without touching the webhook route or UI components.
- *
- * SUGGESTED PRODUCTION SCHEMA (Postgres):
- *
- *   create table call_records (
- *     id                 text primary key,        -- Retell call_id
- *     clinic_id          text not null,
- *     patient_name       text not null default 'Unknown Caller',
- *     service_type       text not null default 'General Inquiry',
- *     status             text not null,           -- Completed | Scheduled | Confirmed | Escalated
- *     outcome            text,                     -- booked | callback_requested | escalated | no_action
- *     started_at         timestamptz not null,
- *     duration_ms        integer,
- *     transcript         text,
- *     transcript_preview text,
- *     booking_time       timestamptz,
- *     recording_url      text,
- *     raw_payload        jsonb,                   -- full Retell payload for debugging/reprocessing
- *     created_at         timestamptz not null default now(),
- *     updated_at         timestamptz not null default now()
- *   );
- *
- *   create index on call_records (clinic_id, started_at desc);
- *
- * Each webhook event (call_started → call_ended → call_analyzed)
- * carries the same call_id, so `upsert` is the correct operation —
- * call_started creates the row, call_ended fills in duration/transcript,
- * call_analyzed fills in outcome/summary.
- */
-
-import type { CallRecord } from "./types";
-
-export interface CallRecordStore {
-  upsert(record: CallRecord): Promise<void>;
-  getRecent(clinicId: string, limit?: number): Promise<CallRecord[]>;
-  getByStatus(clinicId: string, status: CallRecord["status"], limit?: number): Promise<CallRecord[]>;
-  getById(id: string): Promise<CallRecord | null>;
-}
-
-/**
- * In-memory store — for local development only.
- * Data is lost on every server restart / redeploy. Replace with a
- * real database adapter before going to production (see schema above).
- */
-class InMemoryCallRecordStore implements CallRecordStore {
-  private records = new Map<string, CallRecord>();
-
-  async upsert(record: CallRecord): Promise<void> {
-    const existing = this.records.get(record.id);
-    this.records.set(record.id, { ...existing, ...record });
-  }
-
-  async getRecent(clinicId: string, limit = 20): Promise<CallRecord[]> {
-    return [...this.records.values()]
-      .filter((r) => r.clinicId === clinicId)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .slice(0, limit);
-  }
-
-  async getByStatus(clinicId: string, status: CallRecord["status"], limit = 20): Promise<CallRecord[]> {
-    return [...this.records.values()]
-      .filter((r) => r.clinicId === clinicId && r.status === status)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .slice(0, limit);
-  }
-
-  async getById(id: string): Promise<CallRecord | null> {
-    return this.records.get(id) ?? null;
-  }
-}
-
-/**
- * Singleton instance. In a real deployment, replace this export with
- * your database-backed implementation, e.g.:
- *
- *   export const callRecordStore: CallRecordStore = new PostgresCallRecordStore(pool);
- *
- * Keeping the same `CallRecordStore` interface means
- * `src/app/api/webhooks/retell/route.ts` and any dashboard data
- * fetchers require zero changes when you make this swap.
- */
-export const callRecordStore: CallRecordStore = new InMemoryCallRecordStore();
-</file>
-
 <file path="src/lib/retell/types.ts">
 /**
  * Retell AI — Webhook Payload Types
@@ -2934,6 +2444,121 @@ yarn-error.log*
 next-env.d.ts
 </file>
 
+<file path="src/app/admin/clients/[id]/page.tsx">
+import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import ClientSetupForm from "@/components/admin/ClientSetupForm";
+
+export const metadata = { title: "Client Setup | Pyrexx Admin" };
+
+export default async function AdminClientDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supabase = await createClient();
+
+  const { data: clinic } = await supabase.from("clinics").select("*").eq("id", id).single();
+  if (!clinic) notFound();
+
+  const { data: credentials } = await supabase.from("integration_credentials").select("*").eq("clinic_id", id);
+  const crmCredential = credentials?.find((c) => c.provider === "crm") ?? null;
+
+  return (
+    <div className="flex flex-col gap-5 max-w-3xl mx-auto">
+      <Link href="/admin" className="flex items-center gap-1.5 text-xs font-semibold w-fit" style={{ color: "var(--text-muted)" }}>
+        <ArrowLeft size={13} aria-hidden="true" /> Back to clients
+      </Link>
+
+      <ClientSetupForm clinic={clinic} crmCredential={crmCredential} />
+    </div>
+  );
+}
+</file>
+
+<file path="src/app/admin/layout.tsx">
+import LogoMark from "@/components/LogoMark";
+import AdminSignOutButton from "@/components/admin/AdminSignOutButton";
+import ThemeToggle from "@/components/ui/ThemeToggle";
+
+export const metadata = { title: "Admin | Pyrexx AI" };
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen dashboard-bg transition-colors duration-500">
+      <header
+        className="sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 flex items-center gap-3"
+        style={{
+          background: "rgba(var(--bg-base-rgb, 248, 250, 252), 0.8)",
+          backdropFilter: "blur(16px)",
+          borderBottom: "1px solid var(--border-subtle)",
+        }}
+      >
+        <a href="/admin" className="flex items-center gap-2.5 flex-shrink-0">
+          <LogoMark size={36} />
+          <div>
+            <h1 className="text-base md:text-lg font-extrabold leading-tight tracking-tight" style={{ color: "var(--text-primary)" }}>
+              <span style={{ color: "var(--teal)" }}>Pyrexx</span> Admin
+            </h1>
+            <p className="text-[10px] hidden sm:block font-medium leading-tight" style={{ color: "var(--text-muted)" }}>
+              Command Center
+            </p>
+          </div>
+        </a>
+        
+        <div className="flex-1" />
+        
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <div className="w-px h-5" style={{ background: "var(--border-medium)" }} />
+          <AdminSignOutButton />
+        </div>
+      </header>
+      <main className="px-4 md:px-8 py-6 max-w-6xl mx-auto">{children}</main>
+    </div>
+  );
+}
+</file>
+
+<file path="src/app/admin/page.tsx">
+import { createClient } from "@/lib/supabase/server";
+import AdminDashboardClient from "@/components/admin/AdminDashboardClient";
+import type { Database } from "@/types/database";
+
+export const metadata = { title: "Admin Dashboard | Pyrexx" };
+
+type Clinic = Database["public"]["Tables"]["clinics"]["Row"];
+
+export default async function AdminDashboardPage() {
+  const supabase = await createClient();
+  
+  const { data: clinics } = await supabase
+    .from("clinics")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  const allClinics = (clinics ?? []) as Clinic[];
+
+  // Calculate Metrics
+  const activeClinics = allClinics.filter(c => c.subscription_status === 'active');
+  const needsSetup = allClinics.filter(c => c.status === 'onboarding' || c.status === 'pending_setup');
+  
+  // Calculate approximate MRR
+  const mrrCents = activeClinics.reduce((acc, curr) => acc + (curr.plan_price_cents || 0), 0);
+  const mrr = `$${(mrrCents / 100).toLocaleString()}`;
+
+  return (
+    <AdminDashboardClient 
+      clinics={allClinics} 
+      metrics={{ total: allClinics.length, active: activeClinics.length, needsSetup: needsSetup.length, mrr }}
+    />
+  );
+}
+</file>
+
 <file path="src/app/api/onboarding/route.ts">
 /**
  * POST /api/onboarding
@@ -3106,6 +2731,113 @@ export async function POST(req: NextRequest) {
 }
 </file>
 
+<file path="src/app/api/onboarding/start/route.ts">
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { getPlan } from "@/lib/plans";
+import type { CrmProvider, PlanTier } from "@/types/database";
+
+interface SignedDoc {
+  documentType: string;
+  documentVersion: string;
+  signerName: string;
+  signerTitle?: string;
+}
+
+interface OnboardingStartBody {
+  clinicName: string;
+  website: string | null;
+  phoneNumber: string;
+  contactEmail: string;
+  crmProvider: CrmProvider;
+  crmOtherName: string | null;
+  receptionistName: string;
+  planTier: PlanTier;
+  signedDocuments: SignedDoc[];
+}
+
+export async function POST(req: NextRequest) {
+  let body: OnboardingStartBody;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const {
+    clinicName, website, phoneNumber, contactEmail,
+    crmProvider, crmOtherName, receptionistName, planTier, signedDocuments,
+  } = body;
+
+  if (
+    !clinicName?.trim() || !phoneNumber?.trim() || !contactEmail?.trim() ||
+    !receptionistName?.trim() || !crmProvider || !planTier ||
+    !Array.isArray(signedDocuments) || signedDocuments.length === 0
+  ) {
+    return NextResponse.json({ error: "Missing or invalid required fields" }, { status: 400 });
+  }
+
+  if (planTier === "usage_based") {
+    return NextResponse.json({ error: "That plan isn't available yet" }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+  const plan = getPlan(planTier); // Fetch plan details to get the price
+
+  const { data: clinic, error: clinicError } = await supabase
+    .from("clinics")
+    .insert({
+      name: clinicName.trim(),
+      website: website?.trim() || null,
+      phone_number: phoneNumber.trim(),
+      contact_email: contactEmail.trim().toLowerCase(),
+      crm_provider: crmProvider,
+      crm_other_name: crmProvider === "other" ? crmOtherName?.trim() || null : null,
+      receptionist_name: receptionistName.trim(),
+      plan_tier: planTier,
+      plan_price_cents: plan?.priceCents || 0, // Prevent NOT NULL Postgres errors
+      status: "onboarding",
+    })
+    .select("id")
+    .single();
+
+  if (clinicError || !clinic) {
+    console.error("Failed to create clinic in DB:", clinicError);
+
+    // Postgres Code 23505 = Unique Violation (e.g., duplicate email during testing)
+    if (clinicError?.code === "23505") {
+      return NextResponse.json({ 
+        error: "An account or clinic with this email already exists." 
+      }, { status: 409 });
+    }
+
+    return NextResponse.json({ 
+      error: "Could not create clinic record. Please try again." 
+    }, { status: 500 });
+  }
+
+  // Record each signed document. 
+  const agreementRows = signedDocuments.map((doc) => ({
+    clinic_id: clinic.id,
+    document_type: doc.documentType,
+    document_version: doc.documentVersion,
+    signer_name: doc.signerName.trim(),
+    signer_title: doc.signerTitle?.trim() || null,
+    ip_address: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+  }));
+
+  const { error: agreementsError } = await supabase
+    .from("signed_agreements")
+    .insert(agreementRows);
+
+  if (agreementsError) {
+    console.error(`Failed to record signed_agreements for clinic ${clinic.id}:`, agreementsError);
+  }
+
+  return NextResponse.json({ success: true, clinicId: clinic.id });
+}
+</file>
+
 <file path="src/app/api/webhooks/dodo/route.ts">
 /**
  * POST /api/webhooks/dodo
@@ -3248,340 +2980,233 @@ export async function GET() {
 }
 </file>
 
-<file path="src/components/admin/ClientSetupForm.tsx">
+<file path="src/components/admin/AdminDashboardClient.tsx">
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  Building2, Globe, Phone, Mail, Bot, Database,
-  CheckCircle2, Clock, AlertTriangle, Save, Loader2,
-  ShieldAlert, RefreshCw, Zap, PhoneForwarded,
-} from "lucide-react";
-import {
-  updateAgentConnection,
-  updateCrmCredentials,
-  updateClinicStatus,
-  updateEscalationNumber,
-  retryProvisioning,
-} from "@/app/admin/actions";
-import type { Database as DB, ClinicStatus } from "@/types/database";
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { Building2, Clock, CheckCircle2, AlertTriangle, Plus, DollarSign, Activity, Users, Loader2, Search, Bot, Database as DbIcon, X } from "lucide-react";
+import { createManualClient } from "@/app/admin/actions";
+import type { Database, ClinicStatus, PlanTier, CrmProvider } from "@/types/database";
 
-type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
-type IntegrationCredential = DB["public"]["Tables"]["integration_credentials"]["Row"];
+type Clinic = Database["public"]["Tables"]["clinics"]["Row"];
 
-const CRM_LABELS: Record<string, string> = {
-  jane: "Jane App", cliniko: "Cliniko", mindbody: "Mindbody", vagaro: "Vagaro",
-  acuity: "Acuity Scheduling", square_appointments: "Square Appointments",
-  hubspot: "HubSpot", other: "Other", none: "None",
+const STATUS_CONFIG: Record<ClinicStatus, { label: string; bg: string; color: string; icon: React.ElementType }> = {
+  onboarding:    { label: "New Signup",    bg: "var(--info-surface)",    color: "var(--info-text)",    icon: Clock },
+  pending_setup: { label: "Pending Setup", bg: "var(--warning-surface)", color: "var(--warning-text)", icon: AlertTriangle },
+  active:        { label: "Active",        bg: "var(--success-surface)", color: "var(--success-text)", icon: CheckCircle2 },
+  suspended:     { label: "Suspended",     bg: "var(--error-surface)",   color: "var(--error-text)",   icon: AlertTriangle },
 };
 
-const STATUS_FLOW: { value: ClinicStatus; label: string; icon: React.ElementType; bg: string; color: string }[] = [
-  { value: "onboarding",    label: "New Signup",    icon: Clock,         bg: "var(--info-surface)",    color: "var(--info-text)" },
-  { value: "pending_setup", label: "Pending Setup", icon: AlertTriangle, bg: "var(--warning-surface)", color: "var(--warning-text)" },
-  { value: "active",        label: "Active",        icon: CheckCircle2,  bg: "var(--success-surface)", color: "var(--success-text)" },
-  { value: "suspended",     label: "Suspended",     icon: ShieldAlert,   bg: "var(--error-surface)",   color: "var(--error-text)" },
-];
+export default function AdminDashboardClient({ clinics, metrics }: { clinics: Clinic[], metrics: any }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  const [form, setForm] = useState({
+    name: "", contact_email: "", phone_number: "", receptionist_name: "Aria", plan_tier: "overflow" as PlanTier, crm_provider: "none" as CrmProvider
+  });
 
-const PROVISIONING_LABELS: Record<string, { label: string; bg: string; color: string; icon: React.ElementType }> = {
-  pending:       { label: "Not started",    bg: "var(--bg-sunken)",        color: "var(--text-muted)",    icon: Clock },
-  provisioning:  { label: "In progress…",   bg: "var(--info-surface)",     color: "var(--info-text)",     icon: Loader2 },
-  provisioned:   { label: "Live",           bg: "var(--success-surface)",  color: "var(--success-text)",  icon: CheckCircle2 },
-  failed:        { label: "Failed",         bg: "var(--error-surface)",    color: "var(--error-text)",    icon: AlertTriangle },
-};
+  // Filter clients based on search query
+  const filteredClinics = useMemo(() => {
+    if (!searchQuery.trim()) return clinics;
+    const lowerQ = searchQuery.toLowerCase();
+    return clinics.filter(c => 
+      c.name.toLowerCase().includes(lowerQ) || 
+      c.contact_email.toLowerCase().includes(lowerQ) ||
+      c.phone_number.includes(lowerQ)
+    );
+  }, [clinics, searchQuery]);
 
-const PLAN_LABELS: Record<string, string> = {
-  overflow: "Overflow ($1,000/mo)",
-  full_time: "Full Time ($1,500/mo)",
-  usage_based: "Usage Based (coming soon)",
-};
+  const needsAttention = filteredClinics.filter(c => c.status === "onboarding" || c.status === "pending_setup");
+  const others = filteredClinics.filter(c => c.status === "active" || c.status === "suspended");
 
-const inputClass = "w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors";
-const inputStyle = { background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" } as const;
-
-function Field({ label, icon: Icon, children }: { label: string; icon: React.ElementType; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>{label}</label>
-      <div className="relative">
-        <Icon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Section({ icon: Icon, iconBg, iconColor, title, children }: {
-  icon: React.ElementType; iconBg: string; iconColor: string; title: string; children: React.ReactNode;
-}) {
-  return (
-    <section className="card p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
-          <Icon size={14} style={{ color: iconColor }} aria-hidden="true" />
-        </div>
-        <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h3>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-export default function ClientSetupForm({
-  clinic, crmCredential,
-}: {
-  clinic: Clinic;
-  crmCredential: IntegrationCredential | null;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [savedMsg, setSavedMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const [agentId, setAgentId] = useState(clinic.agent_id ?? "");
-  const [agentPhone, setAgentPhone] = useState(clinic.agent_phone_number ?? "");
-  const [escalation, setEscalation] = useState(clinic.escalation_phone_number ?? "");
-
-  const existingCreds = (crmCredential?.credentials ?? {}) as { api_key?: string; account_identifier?: string; notes?: string };
-  const [apiKey, setApiKey] = useState(existingCreds.api_key ?? "");
-  const [accountId, setAccountId] = useState(existingCreds.account_identifier ?? "");
-  const [notes, setNotes] = useState(existingCreds.notes ?? "");
-
-  function flash(msg: string, isError = false) {
-    if (isError) { setErrorMsg(msg); setTimeout(() => setErrorMsg(null), 4000); }
-    else { setSavedMsg(msg); setTimeout(() => setSavedMsg(null), 2500); }
+  async function handleAddClient(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    const res = await createManualClient(form);
+    setLoading(false);
+    if (res.success) {
+      setIsModalOpen(false);
+      setForm({ name: "", contact_email: "", phone_number: "", receptionist_name: "Aria", plan_tier: "overflow", crm_provider: "none" });
+    } else {
+      alert(res.error);
+    }
   }
-
-  function handleAgentSave() {
-    startTransition(async () => {
-      const res = await updateAgentConnection(clinic.id, { agentId, agentPhoneNumber: agentPhone });
-      if ("error" in res) flash(res.error || "Save failed", true);
-      else flash("Agent connection saved");
-    });
-  }
-
-  function handleEscalationSave() {
-    startTransition(async () => {
-      const res = await updateEscalationNumber(clinic.id, escalation);
-      if ("error" in res) flash(res.error || "Save failed", true);
-      else flash("Escalation number saved");
-    });
-  }
-
-  function handleCrmSave() {
-    startTransition(async () => {
-      const res = await updateCrmCredentials(clinic.id, { apiKey, accountIdentifier: accountId, notes });
-      if ("error" in res) flash(res.error || "Save failed", true);
-      else flash("CRM credentials saved");
-    });
-  }
-
-  function handleStatusChange(status: ClinicStatus) {
-    startTransition(async () => {
-      const res = await updateClinicStatus(clinic.id, status);
-      if ("error" in res) flash(res.error || "Status update failed", true);
-      else flash(`Status → ${status.replace("_", " ")}`);
-    });
-  }
-
-  function handleRetryProvisioning() {
-    startTransition(async () => {
-      const res = await retryProvisioning(clinic.id);
-      if ("error" in res) flash(res.error || "Provisioning failed", true);
-      else flash("Agent provisioned successfully");
-    });
-  }
-
-  const provisioningInfo = PROVISIONING_LABELS[clinic.agent_provisioning_status] ?? PROVISIONING_LABELS.pending;
-  const ProvisionIcon = provisioningInfo.icon;
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-base font-extrabold flex-shrink-0"
-            style={{ background: "var(--teal-surface)", color: "var(--teal-text)" }}>
-            {clinic.name.slice(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{clinic.name}</h2>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              {PLAN_LABELS[clinic.plan_tier] ?? "Unknown plan"} · created {new Date(clinic.created_at).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          {savedMsg && (
-            <span className="badge text-[10px]" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
-              <CheckCircle2 size={10} aria-hidden="true" /> {savedMsg}
-            </span>
-          )}
-          {errorMsg && (
-            <span className="badge text-[10px]" style={{ background: "var(--error-surface)", color: "var(--error-text)" }}>
-              <AlertTriangle size={10} aria-hidden="true" /> {errorMsg}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Status pipeline */}
-      <Section icon={Clock} iconBg="var(--purple-surface)" iconColor="var(--purple)" title="Account Status">
-        <div className="flex flex-wrap gap-2">
-          {STATUS_FLOW.map((s) => {
-            const isCurrent = clinic.status === s.value;
-            const Icon = s.icon;
-            return (
-              <button key={s.value} type="button" disabled={isPending}
-                onClick={() => handleStatusChange(s.value)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all disabled:opacity-50"
-                style={isCurrent
-                  ? { background: s.bg, color: s.color, boxShadow: `0 0 0 1.5px ${s.color}` }
-                  : { background: "var(--bg-sunken)", color: "var(--text-muted)" }}>
-                <Icon size={12} aria-hidden="true" /> {s.label}
-              </button>
-            );
-          })}
-        </div>
-      </Section>
-
-      {/* Submitted info */}
-      <Section icon={Building2} iconBg="var(--teal-surface)" iconColor="var(--teal)" title="Submitted Details">
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          {[
-            { icon: Globe,  label: clinic.website || "No website provided" },
-            { icon: Phone,  label: clinic.phone_number },
-            { icon: Mail,   label: clinic.contact_email },
-            { icon: Bot,    label: `Receptionist: ${clinic.receptionist_name}` },
-            { icon: Database, label: `CRM: ${CRM_LABELS[clinic.crm_provider]}${clinic.crm_provider === "other" && clinic.crm_other_name ? ` (${clinic.crm_other_name})` : ""}` },
-          ].map(({ icon: Icon, label }, i) => (
-            <div key={i} className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
-              <Icon size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-              <span className="truncate">{label}</span>
+    <div className="flex flex-col gap-8 w-full">
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { title: "Monthly Recurring", val: metrics.mrr, icon: DollarSign, color: "var(--teal)" },
+          { title: "Total Clients", val: metrics.total, icon: Users, color: "var(--purple)" },
+          { title: "Active Agents", val: metrics.active, icon: Activity, color: "var(--success-text)" },
+          { title: "Needs Setup", val: metrics.needsSetup, icon: AlertTriangle, color: "var(--warning-text)" },
+        ].map((m, i) => (
+          <div key={i} className="card p-5 flex flex-col gap-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{m.title}</span>
+              <m.icon size={16} style={{ color: m.color }} />
             </div>
-          ))}
-        </dl>
-      </Section>
-
-      {/* AI Receptionist Agent provisioning */}
-      <Section icon={Bot} iconBg="var(--purple-surface)" iconColor="var(--purple)" title="AI Receptionist Agent">
-
-        {/* Provisioning status badge */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>Auto-provisioning status</span>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-            style={{ background: provisioningInfo.bg, color: provisioningInfo.color }}>
-            <ProvisionIcon size={11} className={clinic.agent_provisioning_status === "provisioning" ? "animate-spin" : ""} aria-hidden="true" />
-            {provisioningInfo.label}
+            <span className="text-2xl md:text-3xl font-extrabold tracking-tight" style={{ color: "var(--text-primary)" }}>{m.val}</span>
           </div>
-        </div>
+        ))}
+      </div>
 
-        {clinic.agent_provisioning_error && (
-          <div className="rounded-xl px-3 py-2 text-[11px]" style={{ background: "var(--error-surface)", color: "var(--error-text)" }}>
-            <strong>Error:</strong> {clinic.agent_provisioning_error}
-          </div>
-        )}
-
-        {clinic.agent_provisioning_status === "failed" && (
-          <button type="button" onClick={handleRetryProvisioning} disabled={isPending}
-            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
-            style={{ background: "var(--purple-surface)", color: "var(--purple-text)" }}>
-            {isPending ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />}
-            Retry Provisioning
-          </button>
-        )}
-
-        {/* Manual override (or post-provisioning verification) */}
-        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-          Override or verify the auto-provisioned agent details:
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Agent ID" icon={Bot}>
-            <input className={inputClass} style={inputStyle} value={agentId}
-              onChange={(e) => setAgentId(e.target.value)} placeholder="agent_xxxxxxxxxxxx" />
-          </Field>
-          <Field label="Shadow Phone Number" icon={Phone}>
-            <input className={inputClass} style={inputStyle} value={agentPhone}
-              onChange={(e) => setAgentPhone(e.target.value)} placeholder="+1 (555) 010-0000" />
-          </Field>
-        </div>
-
-        <div className="rounded-xl p-3 text-[11px]" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-muted)" }}>
-          Clinic ID (for agent metadata): <code className="font-mono" style={{ color: "var(--text-secondary)" }}>{clinic.id}</code>
-        </div>
-
-        <button type="button" onClick={handleAgentSave} disabled={isPending}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
-          style={{ background: "var(--teal)", color: "#fff" }}>
-          {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
-          Save Agent Details
-        </button>
-      </Section>
-
-      {/* Escalation / transfer target */}
-      <Section icon={PhoneForwarded} iconBg="var(--warning-surface)" iconColor="var(--warning-text)" title="Escalation Phone Number">
-        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-          The back-line or staff cell the AI hands urgent calls off to — <strong>not</strong> the clinic's main line.
-          Using the main line risks a forwarding loop under the CCF shadow-number setup (calls forward back to the agent indefinitely). Set this before the agent goes live.
-        </p>
-        <Field label="Escalation Number" icon={PhoneForwarded}>
-          <input className={inputClass} style={inputStyle} value={escalation}
-            onChange={(e) => setEscalation(e.target.value)} placeholder="+1 (305) 555-9999" type="tel" />
-        </Field>
-        <button type="button" onClick={handleEscalationSave} disabled={isPending}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
-          style={{ background: "var(--teal)", color: "#fff" }}>
-          {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
-          Save Escalation Number
-        </button>
-      </Section>
-
-      {/* CRM credentials */}
-      <Section icon={Database} iconBg="var(--info-surface)" iconColor="var(--info-text)"
-        title={`${CRM_LABELS[clinic.crm_provider]} Credentials`}>
-        <p className="text-[11px] -mt-1 flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>
-          <ShieldAlert size={12} aria-hidden="true" /> Stored admin-only — never visible to the clinic's dashboard.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="API Key / Token" icon={Database}>
-            <input className={inputClass} style={inputStyle} value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)} placeholder="••••••••••••" type="password" />
-          </Field>
-          <Field label="Account / Location ID" icon={Building2}>
-            <input className={inputClass} style={inputStyle} value={accountId}
-              onChange={(e) => setAccountId(e.target.value)} placeholder="acct_xxxxx" />
-          </Field>
-        </div>
+      {/* Toolbar: Title + Search + Add Button */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4">
         <div>
-          <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Setup Notes</label>
-          <textarea className="w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-colors resize-none"
-            style={inputStyle} rows={2} value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Any quirks about this clinic's CRM setup…" />
+          <h2 className="text-xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Client Directory</h2>
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>Manage deployments and integrations.</p>
         </div>
-        <button type="button" onClick={handleCrmSave} disabled={isPending}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
-          style={{ background: "var(--teal)", color: "#fff" }}>
-          {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
-          Save CRM Credentials
-        </button>
-      </Section>
-
-      {/* Agent setup instructions */}
-      <Section icon={Zap} iconBg="var(--success-surface)" iconColor="var(--success-text)" title="CCF Setup — Client Instructions">
-        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-          Send these instructions to the clinic after the agent is provisioned. They point their existing number at the shadow number using Conditional Call Forwarding — no carrier porting required.
-        </p>
-        {clinic.agent_phone_number ? (
-          <div className="rounded-xl p-3 space-y-1.5 text-[11px]" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
-            <p className="font-semibold" style={{ color: "var(--text-primary)" }}>Your AI Receptionist shadow number: <code>{clinic.agent_phone_number}</code></p>
-            <p><strong>Option A (overflow/after-hours):</strong> Ask your phone provider to set a Conditional Call Forward rule — if busy or no answer after 3 rings → forward to {clinic.agent_phone_number}.</p>
-            <p><strong>Option B (IVR branch):</strong> Add a press-option in your auto-attendant that routes to {clinic.agent_phone_number}.</p>
-            <p><strong>Option C (full-time, all calls):</strong> Dial <code>*72{clinic.agent_phone_number}</code> from your desk phone to forward all inbound calls immediately.</p>
+        
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="relative flex-1 md:w-64">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} />
+            <input 
+              type="text" 
+              placeholder="Search clients..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none transition-colors"
+              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+            />
           </div>
-        ) : (
-          <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>Agent phone number not yet assigned — provision the agent first.</p>
+          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors flex-shrink-0" style={{ background: "var(--teal)", color: "#fff" }}>
+            <Plus size={16} /> <span className="hidden sm:inline">Add Client</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Needs Setup Queue */}
+      {needsAttention.length > 0 && (
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: "var(--warning-text)" }}>
+            <AlertTriangle size={14} /> Action Required
+          </h3>
+          <div className="flex flex-col gap-2">
+            {needsAttention.map((c) => <ClinicRow key={c.id} clinic={c} highlighted />)}
+          </div>
+        </section>
+      )}
+
+      {/* All Clients List */}
+      <section>
+        <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>All Clients</h3>
+        <div className="flex flex-col gap-2">
+          {others.length > 0 ? (
+            others.map((c) => <ClinicRow key={c.id} clinic={c} />)
+          ) : (
+            <div className="card p-8 flex flex-col items-center justify-center text-center">
+              <Users size={32} style={{ color: "var(--text-placeholder)" }} className="mb-3" />
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>No active clients found.</p>
+              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{searchQuery ? "Try a different search term." : "Add a client to get started."}</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Sleek Manual Add Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/40 dark:bg-[#0A0514]/70 backdrop-blur-sm"
+              onClick={() => !loading && setIsModalOpen(false)}
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 15 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative card w-full max-w-lg p-0 overflow-hidden flex flex-col"
+            >
+              <div className="px-6 py-4 flex justify-between items-center border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Manual Client Setup</h2>
+                <button onClick={() => setIsModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" style={{ color: "var(--text-muted)" }}>
+                  <X size={18} />
+                </button>
+              </div>
+              
+              <form onSubmit={handleAddClient} className="p-6 flex flex-col gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Clinic Name</label>
+                    <input required placeholder="Radiance MedSpa" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, name: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Phone Number</label>
+                    <input required placeholder="+1 (555) 123-4567" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, phone_number: e.target.value})} />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Contact Email</label>
+                  <input required type="email" placeholder="owner@clinic.com" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, contact_email: e.target.value})} />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Plan Tier</label>
+                    <select className="w-full px-3 py-2.5 rounded-xl text-sm outline-none cursor-pointer appearance-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} value={form.plan_tier} onChange={e => setForm({...form, plan_tier: e.target.value as PlanTier})}>
+                      <option value="overflow">Overflow ($1,000/mo)</option>
+                      <option value="full_time">Full Time ($1,500/mo)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>AI Name</label>
+                    <input required placeholder="Aria" value={form.receptionist_name} className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, receptionist_name: e.target.value})} />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end mt-6 pt-4 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors" style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}>Cancel</button>
+                  <button type="submit" disabled={loading} className="px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-60" style={{ background: "var(--teal)", color: "#fff" }}>
+                    {loading && <Loader2 size={15} className="animate-spin" />} Create & Bypass Billing
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
         )}
-      </Section>
+      </AnimatePresence>
     </div>
+  );
+}
+
+function ClinicRow({ clinic, highlighted = false }: { clinic: Clinic; highlighted?: boolean }) {
+  const status = STATUS_CONFIG[clinic.status];
+  const StatusIcon = status.icon;
+  const hasAgent = !!clinic.agent_id;
+  const hasCrm = clinic.crm_provider !== "none";
+
+  return (
+    <Link href={`/admin/clients/${clinic.id}`} className="card card-hover flex flex-col sm:flex-row sm:items-center gap-4 p-4 transition-all" style={highlighted ? { borderColor: "var(--warning-text)", borderWidth: "1.5px" } : {}}>
+      
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0" style={{ background: "var(--teal-surface)", color: "var(--teal-text)" }}>
+          {clinic.name.slice(0, 2).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{clinic.name}</p>
+            <span className="badge text-[10px]" style={{ background: status.bg, color: status.color }}><StatusIcon size={9} /> {status.label}</span>
+          </div>
+          <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>{clinic.contact_email} · {clinic.phone_number}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pl-12 sm:pl-0">
+        <div className="flex gap-1.5">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold" style={{ background: hasAgent ? "var(--success-surface)" : "var(--bg-sunken)", color: hasAgent ? "var(--success-text)" : "var(--text-muted)" }}>
+            <Bot size={12} /> {hasAgent ? "Agent Live" : "No Agent"}
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold" style={{ background: hasCrm ? "var(--purple-surface)" : "var(--bg-sunken)", color: hasCrm ? "var(--purple-text)" : "var(--text-muted)" }}>
+            <DbIcon size={12} /> {hasCrm ? "CRM Linked" : "No CRM"}
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }
 </file>
@@ -3746,287 +3371,6 @@ export default function LoginForm() {
 }
 </file>
 
-<file path="src/components/ListModal.tsx">
-"use client";
-
-import { useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, ChevronRight, Clock, CheckCircle2, AlertCircle, CalendarClock } from "lucide-react";
-import type { Meeting } from "./MeetingModal";
-
-interface ListModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  subtitle?: string;
-  meetings: Meeting[];
-  onSelectMeeting: (m: Meeting) => void;
-  variant?: "recent" | "booked" | "upcoming";
-}
-
-function statusConfig(status: string) {
-  switch (status) {
-    case "Completed":
-      return {
-        bg: "var(--success-surface)",
-        color: "var(--success-text)",
-        Icon: CheckCircle2,
-      };
-    case "Scheduled":
-      return {
-        bg: "var(--purple-surface)",
-        color: "var(--purple-text)",
-        Icon: CalendarClock,
-      };
-    case "Confirmed":
-      return {
-        bg: "var(--teal-surface)",
-        color: "var(--teal-text)",
-        Icon: CheckCircle2,
-      };
-    default:
-      return {
-        bg: "var(--warning-surface)",
-        color: "var(--warning-text)",
-        Icon: AlertCircle,
-      };
-  }
-}
-
-export default function ListModal({
-  isOpen,
-  onClose,
-  title,
-  subtitle,
-  meetings,
-  onSelectMeeting,
-  variant = "recent",
-}: ListModalProps) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const titleId = `list-modal-title-${title.replace(/\s+/g, "-").toLowerCase()}`;
-
-  /* Focus trap */
-  useEffect(() => {
-    if (!isOpen) return;
-    const t = setTimeout(() => closeRef.current?.focus(), 60);
-    return () => clearTimeout(t);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onClose(); return; }
-      if (e.key !== "Tab") return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const focusable = panel.querySelectorAll<HTMLElement>(
-        'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey) {
-        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-      } else {
-        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
-
-  const accentColor =
-    variant === "upcoming" ? "var(--purple)" :
-    variant === "booked"   ? "var(--teal)"   : "var(--teal)";
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-        >
-          {/* Backdrop */}
-          <motion.div
-            className="absolute inset-0"
-            style={{ background: "rgba(10,5,20,0.55)", backdropFilter: "blur(6px)" }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            onClick={onClose}
-            aria-hidden="true"
-          />
-
-          {/* Panel — sheet on mobile, centered card on sm+ */}
-          <motion.div
-            ref={panelRef}
-            className="relative w-full sm:max-w-lg flex flex-col"
-            style={{
-              background: "var(--bg-card)",
-              borderRadius: "1.5rem 1.5rem 0 0",
-              border: "1px solid var(--border-subtle)",
-              boxShadow: "var(--shadow-xl)",
-              maxHeight: "62vh",
-            }}
-            initial={{ y: 48, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 48, opacity: 0, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 340, damping: 28 }}
-          >
-            {/* sm+: full rounded card */}
-            <style>{`
-              @media (min-width: 640px) {
-                [data-list-panel] {
-                  border-radius: 1.5rem !important;
-                  max-height: 60vh !important;
-                }
-              }
-            `}</style>
-            <div data-list-panel style={{ display: "contents" }}>
-
-              {/* Drag handle (mobile only) */}
-              <div className="flex justify-center pt-3 pb-1 sm:hidden" aria-hidden="true">
-                <div className="w-10 h-1 rounded-full" style={{ background: "var(--border-medium)" }} />
-              </div>
-
-              {/* Header */}
-              <div
-                className="flex items-center justify-between px-5 py-4"
-                style={{ borderBottom: "1px solid var(--border-subtle)" }}
-              >
-                <div>
-                  <h2
-                    id={titleId}
-                    className="text-base font-bold"
-                    style={{ color: "var(--text-primary)" }}
-                  >
-                    {title}
-                  </h2>
-                  {subtitle && (
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                      {subtitle}
-                    </p>
-                  )}
-                </div>
-                <button
-                  ref={closeRef}
-                  type="button"
-                  onClick={onClose}
-                  aria-label="Close list"
-                  className="flex items-center justify-center w-8 h-8 rounded-full cursor-pointer transition-colors"
-                  style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}
-                  onMouseOver={(e) => (e.currentTarget.style.background = "var(--border-subtle)")}
-                  onMouseOut={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")}
-                >
-                  <X size={15} aria-hidden="true" />
-                </button>
-              </div>
-
-              {/* Scrollable list body */}
-              <div
-                className="flex-1 overflow-y-auto custom-scroll px-3 py-2"
-                role="list"
-              >
-                {meetings.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-2">
-                    <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-                      No items yet
-                    </p>
-                  </div>
-                ) : (
-                  meetings.map((meeting, idx) => {
-                    const { bg, color, Icon } = statusConfig(meeting.status);
-                    return (
-                      <motion.button
-                        key={meeting.id}
-                        type="button"
-                        role="listitem"
-                        onClick={() => { onSelectMeeting(meeting); onClose(); }}
-                        aria-label={`View details for ${meeting.name}, ${meeting.type}`}
-                        className="w-full text-left flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer group"
-                        style={{ borderBottom: idx < meetings.length - 1 ? "1px solid var(--border-subtle)" : "none" }}
-                        whileHover={{ backgroundColor: "var(--bg-sunken)" }}
-                        transition={{ duration: 0.15 }}
-                      >
-                        {/* Status icon */}
-                        <div
-                          className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                          style={{ background: bg }}
-                        >
-                          <Icon size={14} style={{ color }} aria-hidden="true" />
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className="text-sm font-semibold truncate"
-                              style={{ color: "var(--text-primary)" }}
-                            >
-                              {meeting.name}
-                            </span>
-                            <span
-                              className="badge flex-shrink-0 text-[10px]"
-                              style={{ background: bg, color }}
-                            >
-                              {meeting.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
-                              {meeting.type}
-                            </span>
-                            <span style={{ color: "var(--border-medium)" }} aria-hidden="true">·</span>
-                            <span className="text-xs whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
-                              {meeting.time}
-                            </span>
-                          </div>
-                          {meeting.bookedAt && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <Clock size={10} style={{ color: accentColor }} aria-hidden="true" />
-                              <span className="text-[10px] font-medium" style={{ color: accentColor }}>
-                                Booked {meeting.bookedAt}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Chevron */}
-                        <ChevronRight
-                          size={14}
-                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ color: "var(--text-muted)" }}
-                          aria-hidden="true"
-                        />
-                      </motion.button>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Footer */}
-              <div
-                className="px-5 py-3"
-                style={{ borderTop: "1px solid var(--border-subtle)" }}
-              >
-                <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-                  {meetings.length} {meetings.length === 1 ? "record" : "records"} total
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-}
-</file>
-
 <file path="src/components/LogoMark.tsx">
 "use client";
 
@@ -4057,6 +3401,163 @@ export default function LogoMark({ size = 36, className = "" }: LogoMarkProps) {
         className="object-contain"
         priority
       />
+    </div>
+  );
+}
+</file>
+
+<file path="src/components/onboarding/DocumentSigner.tsx">
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { CheckCircle2, FileText, ChevronDown, AlertTriangle } from "lucide-react";
+import { LEGAL_DOCUMENTS, type LegalDocument } from "@/lib/legal-docs";
+
+interface DocumentSignerProps {
+  signerName: string;
+  onSignerNameChange: (name: string) => void;
+  allSigned: boolean;
+  onAllSignedChange: (signed: boolean) => void;
+}
+
+function renderMarkdown(md: string): string {
+  return md
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("# ")) return `<h2 class="text-base font-bold mb-2">${line.slice(2)}</h2>`;
+      if (line.trim() === "") return "<br/>";
+      const bolded = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      return `<p class="text-xs leading-relaxed mb-2">${bolded}</p>`;
+    })
+    .join("");
+}
+
+function DocumentCard({ doc, onAcknowledged }: { doc: LegalDocument; onAcknowledged: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [reachedBottom, setReachedBottom] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 12;
+    if (atBottom && !reachedBottom) {
+      setReachedBottom(true);
+      onAcknowledged();
+    }
+  }, [reachedBottom, onAcknowledged]);
+
+  const handleManualAcknowledge = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent accordion toggle
+    if (!reachedBottom) {
+      setReachedBottom(true);
+      onAcknowledged();
+    }
+  };
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 cursor-pointer"
+        style={{ background: "var(--bg-sunken)" }}
+        aria-expanded={expanded}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Manually clickable acknowledge button */}
+          <button 
+            type="button"
+            onClick={handleManualAcknowledge}
+            title="Click to acknowledge"
+            className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors"
+            style={{ 
+              background: reachedBottom ? "var(--success-surface)" : "var(--bg-card)",
+              border: reachedBottom ? "none" : "1px solid var(--border-subtle)" 
+            }}
+          >
+            {reachedBottom
+              ? <CheckCircle2 size={14} style={{ color: "var(--success-text)" }} aria-hidden="true" />
+              : <FileText size={14} style={{ color: "var(--text-muted)" }} aria-hidden="true" />}
+          </button>
+          
+          <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{doc.title}</span>
+        </div>
+        <ChevronDown size={15} style={{ color: "var(--text-muted)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} aria-hidden="true" />
+      </button>
+
+      {expanded && (
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="px-4 py-3 overflow-y-auto custom-scroll"
+          style={{ maxHeight: 220, background: "var(--bg-card)" }}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(doc.content) }}
+        />
+      )}
+
+      {!reachedBottom && (
+        <p className="text-[10px] px-4 py-2" style={{ color: "var(--text-muted)", background: "var(--bg-card)" }}>
+          {expanded ? "Scroll to the bottom or tap the document icon to acknowledge." : "Tap to review or tap the document icon to acknowledge directly."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function DocumentSigner({
+  signerName, onSignerNameChange, allSigned, onAllSignedChange,
+}: DocumentSignerProps) {
+  const [readSet, setReadSet] = useState<Set<string>>(new Set());
+
+  const markRead = (type: string) => {
+    setReadSet((prev) => {
+      const next = new Set(prev).add(type);
+      const allRead = next.size === LEGAL_DOCUMENTS.length;
+      onAllSignedChange(allRead && signerName.trim().length > 1);
+      return next;
+    });
+  };
+
+  function handleNameChange(name: string) {
+    onSignerNameChange(name);
+    const allRead = readSet.size === LEGAL_DOCUMENTS.length;
+    onAllSignedChange(allRead && name.trim().length > 1);
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[11px]" style={{ background: "var(--warning-surface)", color: "var(--warning-text)" }}>
+        <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <span>Review each document below — you must acknowledge all of them before you can continue.</span>
+      </div>
+
+      {LEGAL_DOCUMENTS.map((doc) => (
+        <DocumentCard key={doc.type} doc={doc} onAcknowledged={() => markRead(doc.type)} />
+      ))}
+
+      <div className="pt-1">
+        <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
+          Type your full legal name to sign
+        </label>
+        <input
+          type="text"
+          value={signerName}
+          onChange={(e) => handleNameChange(e.target.value)}
+          placeholder="Jane A. Doe"
+          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-colors"
+          style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+        />
+        <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+          By typing your name above, you're electronically signing all {LEGAL_DOCUMENTS.length} documents reviewed above, dated to today.
+        </p>
+      </div>
+
+      {allSigned && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
+          <CheckCircle2 size={13} aria-hidden="true" /> All documents reviewed and signed
+        </div>
+      )}
     </div>
   );
 }
@@ -4221,6 +3722,115 @@ export function verifyDodoWebhook(
     return null;
   }
 }
+</file>
+
+<file path="src/lib/retell/store.ts">
+import { createAdminClient } from "@/lib/supabase/server";
+import type { CallRecord } from "./types";
+
+export interface CallRecordStore {
+  upsert(record: CallRecord): Promise<void>;
+  getRecent(clinicId: string, limit?: number): Promise<CallRecord[]>;
+  getByStatus(clinicId: string, status: CallRecord["status"], limit?: number): Promise<CallRecord[]>;
+  getById(id: string): Promise<CallRecord | null>;
+}
+
+/**
+ * Real Supabase implementation.
+ * Used by webhooks to permanently store Retell call data.
+ */
+class SupabaseCallRecordStore implements CallRecordStore {
+  
+  async upsert(record: CallRecord): Promise<void> {
+    // Admin client bypasses RLS, ensuring webhooks can always write.
+    const supabase = createAdminClient();
+    
+    // Map TS camelCase to Postgres snake_case
+    const dbRecord = {
+      id: record.id,
+      clinic_id: record.clinicId,
+      patient_name: record.patientName,
+      service_type: record.serviceType,
+      status: record.status,
+      outcome: record.outcome || null,
+      started_at: record.startedAt,
+      duration_ms: record.durationMs || null,
+      transcript: record.transcript || null,
+      transcript_preview: record.transcriptPreview || null,
+      booking_time: record.bookingTime || null,
+      recording_url: record.recordingUrl || null,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+      .from("call_records")
+      .upsert(dbRecord, { onConflict: "id" });
+
+    if (error) {
+      console.error(`Failed to upsert CallRecord ${record.id}:`, error);
+      throw error;
+    }
+  }
+
+  async getRecent(clinicId: string, limit = 20): Promise<CallRecord[]> {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("call_records")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .order("started_at", { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return data.map(mapFromDb);
+  }
+
+  async getByStatus(clinicId: string, status: CallRecord["status"], limit = 20): Promise<CallRecord[]> {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("call_records")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("status", status)
+      .order("started_at", { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return data.map(mapFromDb);
+  }
+
+  async getById(id: string): Promise<CallRecord | null> {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("call_records")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error || !data) return null;
+    return mapFromDb(data);
+  }
+}
+
+// Helper to map snake_case back to frontend camelCase
+function mapFromDb(row: any): CallRecord {
+  return {
+    id: row.id,
+    clinicId: row.clinic_id,
+    patientName: row.patient_name,
+    serviceType: row.service_type,
+    status: row.status,
+    outcome: row.outcome,
+    startedAt: row.started_at,
+    durationMs: row.duration_ms,
+    transcript: row.transcript,
+    transcriptPreview: row.transcript_preview,
+    bookingTime: row.booking_time,
+    recordingUrl: row.recording_url,
+  };
+}
+
+export const callRecordStore: CallRecordStore = new SupabaseCallRecordStore();
 </file>
 
 <file path="src/lib/supabase/server.ts">
@@ -4395,150 +4005,6 @@ export const config = {
 };
 </file>
 
-<file path="src/app/admin/actions.ts">
-"use server";
-
-/**
- * Admin Server Actions
- * ───────────────────────────────────────────────────────────────
- * Every action here re-verifies role === 'admin' via the regular
- * (RLS-respecting) server client before writing. This is
- * belt-and-suspenders: proxy.ts already blocks non-admins from
- * reaching /admin/*, and the RLS policies in 0001_init_schema.sql
- * (`admin_update_clinics`, `admin_all_integration_credentials`) would
- * reject the write anyway — but checking explicitly here gives a
- * clean error message instead of a silent RLS failure.
- */
-
-import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
-import type { ClinicStatus } from "@/types/database";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role !== "admin") throw new Error("Not authorized");
-  return supabase;
-}
-
-/**
- * Connect an AI Receptionist Agent to this clinic's account.
- */
-export async function updateAgentConnection(
-  clinicId: string,
-  data: { agentId: string; agentPhoneNumber: string }
-) {
-  const supabase = await requireAdmin();
-
-  const { error } = await supabase
-    .from("clinics")
-    .update({
-      agent_id: data.agentId.trim() || null,
-      agent_phone_number: data.agentPhoneNumber.trim() || null,
-    })
-    .eq("id", clinicId);
-
-  if (error) return { error: error.message };
-  revalidatePath(`/admin/clients/${clinicId}`);
-  return { success: true };
-}
-
-/**
- * Store/update CRM credentials for this clinic.
- */
-export async function updateCrmCredentials(
-  clinicId: string,
-  credentials: { apiKey: string; accountIdentifier: string; notes: string }
-) {
-  const supabase = await requireAdmin();
-
-  const { error } = await supabase
-    .from("integration_credentials")
-    .upsert(
-      {
-        clinic_id: clinicId,
-        provider: "crm",
-        credentials: {
-          api_key: credentials.apiKey.trim(),
-          account_identifier: credentials.accountIdentifier.trim(),
-          notes: credentials.notes.trim(),
-        },
-      },
-      { onConflict: "clinic_id,provider" }
-    );
-
-  if (error) return { error: error.message };
-  revalidatePath(`/admin/clients/${clinicId}`);
-  return { success: true };
-}
-
-/**
- * Update the escalation phone number.
- */
-export async function updateEscalationNumber(clinicId: string, escalationPhoneNumber: string) {
-  const supabase = await requireAdmin();
-
-  const { error } = await supabase
-    .from("clinics")
-    .update({ escalation_phone_number: escalationPhoneNumber.trim() || null })
-    .eq("id", clinicId);
-
-  if (error) return { error: error.message };
-  revalidatePath(`/admin/clients/${clinicId}`);
-  return { success: true };
-}
-
-/**
- * Manually re-trigger AI Receptionist Agent provisioning.
- */
-export async function retryProvisioning(clinicId: string) {
-  const supabase = await requireAdmin();
-
-  const { data: clinic, error: fetchError } = await supabase
-    .from("clinics")
-    .select("*")
-    .eq("id", clinicId)
-    .single();
-
-  if (fetchError || !clinic) return { error: "Clinic not found" };
-
-  const { provisionAiReceptionistAgent } = await import("@/lib/retell/provision");
-  const result = await provisionAiReceptionistAgent(clinic);
-
-  revalidatePath(`/admin/clients/${clinicId}`);
-
-  if (!result.success) return { error: result.error || "Provisioning failed" };
-  return { success: true };
-}
-
-/**
- * Move a clinic through its lifecycle:
- *   onboarding → pending_setup → active
- *   active/pending_setup → suspended (and back)
- */
-export async function updateClinicStatus(clinicId: string, status: ClinicStatus) {
-  const supabase = await requireAdmin();
-
-  const { error } = await supabase
-    .from("clinics")
-    .update({ status })
-    .eq("id", clinicId);
-
-  if (error) return { error: error.message };
-  revalidatePath(`/admin/clients/${clinicId}`);
-  revalidatePath("/admin");
-  return { success: true };
-}
-</file>
-
 <file path="src/app/api/billing/checkout/route.ts">
 /**
  * POST /api/billing/checkout
@@ -4616,6 +4082,473 @@ export async function POST(req: NextRequest) {
     console.error("Dodo checkout creation failed:", err);
     return NextResponse.json({ error: "Could not create checkout session" }, { status: 500 });
   }
+}
+</file>
+
+<file path="src/components/admin/ClientSetupForm.tsx">
+"use client";
+
+import { useState, useTransition } from "react";
+import {
+  Building2, Globe, Phone, Mail, Bot, Database,
+  CheckCircle2, Clock, AlertTriangle, Save, Loader2,
+  ShieldAlert, RefreshCw, Zap, PhoneForwarded, Trash2
+} from "lucide-react";
+import {
+  updateAgentConnection,
+  updateCrmCredentials,
+  updateClinicStatus,
+  updateEscalationNumber,
+  retryProvisioning,
+  disconnectAgent
+} from "@/app/admin/actions";
+import type { Database as DB, ClinicStatus } from "@/types/database";
+
+type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
+type IntegrationCredential = DB["public"]["Tables"]["integration_credentials"]["Row"];
+
+const CRM_LABELS: Record<string, string> = {
+  jane: "Jane App", cliniko: "Cliniko", mindbody: "Mindbody", vagaro: "Vagaro",
+  acuity: "Acuity Scheduling", square_appointments: "Square Appointments",
+  hubspot: "HubSpot", other: "Other", none: "None",
+};
+
+const STATUS_FLOW: { value: ClinicStatus; label: string; icon: React.ElementType; bg: string; color: string }[] = [
+  { value: "onboarding",    label: "New Signup",    icon: Clock,         bg: "var(--info-surface)",    color: "var(--info-text)" },
+  { value: "pending_setup", label: "Pending Setup", icon: AlertTriangle, bg: "var(--warning-surface)", color: "var(--warning-text)" },
+  { value: "active",        label: "Active",        icon: CheckCircle2,  bg: "var(--success-surface)", color: "var(--success-text)" },
+  { value: "suspended",     label: "Suspended",     icon: ShieldAlert,   bg: "var(--error-surface)",   color: "var(--error-text)" },
+];
+
+const PROVISIONING_LABELS: Record<string, { label: string; bg: string; color: string; icon: React.ElementType }> = {
+  pending:       { label: "Not started",    bg: "var(--bg-sunken)",        color: "var(--text-muted)",    icon: Clock },
+  provisioning:  { label: "In progress…",   bg: "var(--info-surface)",     color: "var(--info-text)",     icon: Loader2 },
+  provisioned:   { label: "Live",           bg: "var(--success-surface)",  color: "var(--success-text)",  icon: CheckCircle2 },
+  failed:        { label: "Failed",         bg: "var(--error-surface)",    color: "var(--error-text)",    icon: AlertTriangle },
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  overflow: "Overflow ($1,000/mo)",
+  full_time: "Full Time ($1,500/mo)",
+  usage_based: "Usage Based (coming soon)",
+};
+
+const inputClass = "w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors";
+const inputStyle = { background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" } as const;
+
+function Field({ label, icon: Icon, children }: { label: string; icon: React.ElementType; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>{label}</label>
+      <div className="relative">
+        <Icon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Section({ icon: Icon, iconBg, iconColor, title, children }: {
+  icon: React.ElementType; iconBg: string; iconColor: string; title: string; children: React.ReactNode;
+}) {
+  return (
+    <section className="card p-5 flex flex-col gap-4">
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
+          <Icon size={14} style={{ color: iconColor }} aria-hidden="true" />
+        </div>
+        <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export default function ClientSetupForm({
+  clinic, crmCredential,
+}: {
+  clinic: Clinic;
+  crmCredential: IntegrationCredential | null;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [agentId, setAgentId] = useState(clinic.agent_id ?? "");
+  const [agentPhone, setAgentPhone] = useState(clinic.agent_phone_number ?? "");
+  const [escalation, setEscalation] = useState(clinic.escalation_phone_number ?? "");
+
+  const existingCreds = (crmCredential?.credentials ?? {}) as { api_key?: string; account_identifier?: string; notes?: string };
+  const [apiKey, setApiKey] = useState(existingCreds.api_key ?? "");
+  const [accountId, setAccountId] = useState(existingCreds.account_identifier ?? "");
+  const [notes, setNotes] = useState(existingCreds.notes ?? "");
+
+  function flash(msg: string, isError = false) {
+    if (isError) { setErrorMsg(msg); setTimeout(() => setErrorMsg(null), 4000); }
+    else { setSavedMsg(msg); setTimeout(() => setSavedMsg(null), 2500); }
+  }
+
+  function handleAgentSave() {
+    startTransition(async () => {
+      const res = await updateAgentConnection(clinic.id, { agentId, agentPhoneNumber: agentPhone });
+      if ("error" in res) flash(res.error || "Save failed", true);
+      else flash("Agent connection saved");
+    });
+  }
+
+  function handleAgentDisconnect() {
+    if (!confirm("Are you sure you want to disconnect this agent? Live calls to the shadow number will fail immediately.")) return;
+    startTransition(async () => {
+      const res = await disconnectAgent(clinic.id);
+      if ("error" in res) flash(res.error || "Failed to disconnect", true);
+      else { 
+        flash("Agent disconnected successfully"); 
+        setAgentId(""); 
+        setAgentPhone(""); 
+      }
+    });
+  }
+
+  function handleEscalationSave() {
+    startTransition(async () => {
+      const res = await updateEscalationNumber(clinic.id, escalation);
+      if ("error" in res) flash(res.error || "Save failed", true);
+      else flash("Escalation number saved");
+    });
+  }
+
+  function handleCrmSave() {
+    startTransition(async () => {
+      const res = await updateCrmCredentials(clinic.id, { apiKey, accountIdentifier: accountId, notes });
+      if ("error" in res) flash(res.error || "Save failed", true);
+      else flash("CRM credentials saved");
+    });
+  }
+
+  function handleStatusChange(status: ClinicStatus) {
+    startTransition(async () => {
+      const res = await updateClinicStatus(clinic.id, status);
+      if ("error" in res) flash(res.error || "Status update failed", true);
+      else flash(`Status → ${status.replace("_", " ")}`);
+    });
+  }
+
+  function handleRetryProvisioning() {
+    startTransition(async () => {
+      const res = await retryProvisioning(clinic.id);
+      if ("error" in res) flash(res.error || "Provisioning failed", true);
+      else flash("Agent provisioned successfully");
+    });
+  }
+
+  const provisioningInfo = PROVISIONING_LABELS[clinic.agent_provisioning_status] ?? PROVISIONING_LABELS.pending;
+  const ProvisionIcon = provisioningInfo.icon;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-base font-extrabold flex-shrink-0"
+            style={{ background: "var(--teal-surface)", color: "var(--teal-text)" }}>
+            {clinic.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{clinic.name}</h2>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              {PLAN_LABELS[clinic.plan_tier] ?? "Unknown plan"} · created {new Date(clinic.created_at).toLocaleDateString()}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          {savedMsg && (
+            <span className="badge text-[10px]" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
+              <CheckCircle2 size={10} aria-hidden="true" /> {savedMsg}
+            </span>
+          )}
+          {errorMsg && (
+            <span className="badge text-[10px]" style={{ background: "var(--error-surface)", color: "var(--error-text)" }}>
+              <AlertTriangle size={10} aria-hidden="true" /> {errorMsg}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Status pipeline */}
+      <Section icon={Clock} iconBg="var(--purple-surface)" iconColor="var(--purple)" title="Account Status">
+        <div className="flex flex-wrap gap-2">
+          {STATUS_FLOW.map((s) => {
+            const isCurrent = clinic.status === s.value;
+            const Icon = s.icon;
+            return (
+              <button key={s.value} type="button" disabled={isPending}
+                onClick={() => handleStatusChange(s.value)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all disabled:opacity-50"
+                style={isCurrent
+                  ? { background: s.bg, color: s.color, boxShadow: `0 0 0 1.5px ${s.color}` }
+                  : { background: "var(--bg-sunken)", color: "var(--text-muted)" }}>
+                <Icon size={12} aria-hidden="true" /> {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Submitted info */}
+      <Section icon={Building2} iconBg="var(--teal-surface)" iconColor="var(--teal)" title="Submitted Details">
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          {[
+            { icon: Globe,  label: clinic.website || "No website provided" },
+            { icon: Phone,  label: clinic.phone_number },
+            { icon: Mail,   label: clinic.contact_email },
+            { icon: Bot,    label: `Receptionist: ${clinic.receptionist_name}` },
+            { icon: Database, label: `CRM: ${CRM_LABELS[clinic.crm_provider]}${clinic.crm_provider === "other" && clinic.crm_other_name ? ` (${clinic.crm_other_name})` : ""}` },
+          ].map(({ icon: Icon, label }, i) => (
+            <div key={i} className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
+              <Icon size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+              <span className="truncate">{label}</span>
+            </div>
+          ))}
+        </dl>
+      </Section>
+
+      {/* AI Receptionist Agent provisioning */}
+      <Section icon={Bot} iconBg="var(--purple-surface)" iconColor="var(--purple)" title="AI Receptionist Agent">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>Auto-provisioning status</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+            style={{ background: provisioningInfo.bg, color: provisioningInfo.color }}>
+            <ProvisionIcon size={11} className={clinic.agent_provisioning_status === "provisioning" ? "animate-spin" : ""} aria-hidden="true" />
+            {provisioningInfo.label}
+          </div>
+        </div>
+
+        {clinic.agent_provisioning_error && (
+          <div className="rounded-xl px-3 py-2 text-[11px]" style={{ background: "var(--error-surface)", color: "var(--error-text)" }}>
+            <strong>Error:</strong> {clinic.agent_provisioning_error}
+          </div>
+        )}
+
+        {clinic.agent_provisioning_status === "failed" && (
+          <button type="button" onClick={handleRetryProvisioning} disabled={isPending}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
+            style={{ background: "var(--purple-surface)", color: "var(--purple-text)" }}>
+            {isPending ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />}
+            Retry Provisioning
+          </button>
+        )}
+
+        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+          Override, verify, or disconnect the auto-provisioned agent details:
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Agent ID" icon={Bot}>
+            <input className={inputClass} style={inputStyle} value={agentId}
+              onChange={(e) => setAgentId(e.target.value)} placeholder="agent_xxxxxxxxxxxx" />
+          </Field>
+          <Field label="Shadow Phone Number" icon={Phone}>
+            <input className={inputClass} style={inputStyle} value={agentPhone}
+              onChange={(e) => setAgentPhone(e.target.value)} placeholder="+1 (555) 010-0000" />
+          </Field>
+        </div>
+
+        <div className="rounded-xl p-3 text-[11px]" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-muted)" }}>
+          Clinic ID (for agent metadata): <code className="font-mono" style={{ color: "var(--text-secondary)" }}>{clinic.id}</code>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mt-2">
+          <button type="button" onClick={handleAgentSave} disabled={isPending}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60"
+            style={{ background: "var(--teal)", color: "#fff" }}>
+            {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
+            Save Details
+          </button>
+
+          {clinic.agent_id && (
+            <button type="button" onClick={handleAgentDisconnect} disabled={isPending}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60"
+              style={{ background: "var(--error-surface)", color: "var(--error-text)" }}>
+              {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
+              Disconnect Agent
+            </button>
+          )}
+        </div>
+      </Section>
+
+      {/* Escalation / transfer target */}
+      <Section icon={PhoneForwarded} iconBg="var(--warning-surface)" iconColor="var(--warning-text)" title="Escalation Phone Number">
+        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+          The back-line or staff cell the AI hands urgent calls off to — <strong>not</strong> the clinic's main line.
+          Using the main line risks a forwarding loop under the CCF shadow-number setup. Set this before the agent goes live.
+        </p>
+        <Field label="Escalation Number" icon={PhoneForwarded}>
+          <input className={inputClass} style={inputStyle} value={escalation}
+            onChange={(e) => setEscalation(e.target.value)} placeholder="+1 (305) 555-9999" type="tel" />
+        </Field>
+        <button type="button" onClick={handleEscalationSave} disabled={isPending}
+          className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
+          style={{ background: "var(--teal)", color: "#fff" }}>
+          {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
+          Save Escalation Number
+        </button>
+      </Section>
+
+      {/* CRM credentials */}
+      <Section icon={Database} iconBg="var(--info-surface)" iconColor="var(--info-text)"
+        title={`${CRM_LABELS[clinic.crm_provider]} Credentials`}>
+        <p className="text-[11px] -mt-1 flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>
+          <ShieldAlert size={12} aria-hidden="true" /> Stored admin-only — never visible to the clinic's dashboard.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="API Key / Token" icon={Database}>
+            <input className={inputClass} style={inputStyle} value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)} placeholder="••••••••••••" type="password" />
+          </Field>
+          <Field label="Account / Location ID" icon={Building2}>
+            <input className={inputClass} style={inputStyle} value={accountId}
+              onChange={(e) => setAccountId(e.target.value)} placeholder="acct_xxxxx" />
+          </Field>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Setup Notes</label>
+          <textarea className="w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-colors resize-none"
+            style={inputStyle} rows={2} value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Any quirks about this clinic's CRM setup…" />
+        </div>
+        <button type="button" onClick={handleCrmSave} disabled={isPending}
+          className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 w-fit"
+          style={{ background: "var(--teal)", color: "#fff" }}>
+          {isPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
+          Save CRM Credentials
+        </button>
+      </Section>
+
+      {/* Agent setup instructions */}
+      <Section icon={Zap} iconBg="var(--success-surface)" iconColor="var(--success-text)" title="CCF Setup — Client Instructions">
+        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+          Send these instructions to the clinic after the agent is provisioned. They point their existing number at the shadow number using Conditional Call Forwarding — no carrier porting required.
+        </p>
+        {clinic.agent_phone_number ? (
+          <div className="rounded-xl p-3 space-y-1.5 text-[11px]" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+            <p className="font-semibold" style={{ color: "var(--text-primary)" }}>Your AI Receptionist shadow number: <code>{clinic.agent_phone_number}</code></p>
+            <p><strong>Option A (overflow/after-hours):</strong> Ask your phone provider to set a Conditional Call Forward rule — if busy or no answer after 3 rings → forward to {clinic.agent_phone_number}.</p>
+            <p><strong>Option B (IVR branch):</strong> Add a press-option in your auto-attendant that routes to {clinic.agent_phone_number}.</p>
+            <p><strong>Option C (full-time, all calls):</strong> Dial <code>*72{clinic.agent_phone_number}</code> from your desk phone to forward all inbound calls immediately.</p>
+          </div>
+        ) : (
+          <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>Agent phone number not yet assigned — provision the agent first.</p>
+        )}
+      </Section>
+    </div>
+  );
+}
+</file>
+
+<file path="src/components/ListModal.tsx">
+"use client";
+
+import { useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, ChevronRight, Clock, CheckCircle2, AlertCircle, CalendarClock } from "lucide-react";
+import type { Meeting } from "./MeetingModal";
+
+interface ListModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  meetings: Meeting[];
+  onSelectMeeting: (m: Meeting) => void;
+  variant?: "recent" | "booked" | "upcoming";
+}
+
+function statusConfig(status: string) {
+  switch (status) {
+    case "Completed": return { bg: "var(--success-surface)", color: "var(--success-text)", Icon: CheckCircle2 };
+    case "Scheduled": return { bg: "var(--purple-surface)", color: "var(--purple-text)", Icon: CalendarClock };
+    case "Confirmed": return { bg: "var(--teal-surface)", color: "var(--teal-text)", Icon: CheckCircle2 };
+    default: return { bg: "var(--warning-surface)", color: "var(--warning-text)", Icon: AlertCircle };
+  }
+}
+
+export default function ListModal({ isOpen, onClose, title, subtitle, meetings, onSelectMeeting, variant = "recent" }: ListModalProps) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = `list-modal-title-${title.replace(/\s+/g, "-").toLowerCase()}`;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => closeRef.current?.focus(), 60);
+    return () => clearTimeout(t);
+  }, [isOpen]);
+
+  const accentColor = variant === "upcoming" ? "var(--purple)" : "var(--teal)";
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+          <motion.div
+            className="absolute inset-0"
+            style={{ background: "rgba(10,5,20,0.55)", backdropFilter: "blur(6px)" }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }} onClick={onClose} aria-hidden="true"
+          />
+
+          <motion.div
+            ref={panelRef}
+            className="relative w-full sm:max-w-lg flex flex-col"
+            style={{
+              background: "var(--bg-card)", borderRadius: "1.5rem 1.5rem 0 0",
+              border: "1px solid var(--border-subtle)", boxShadow: "var(--shadow-xl)", maxHeight: "62vh",
+            }}
+            initial={{ y: "100%", opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: "100%", opacity: 0, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 340, damping: 28 }}
+          >
+            <style>{`@media (min-width: 640px) { [data-list-panel] { border-radius: 1.5rem !important; max-height: 60vh !important; } }`}</style>
+            
+            <div data-list-panel style={{ display: "contents" }}>
+              <div className="flex justify-center pt-3 pb-1 sm:hidden" aria-hidden="true">
+                <div className="w-10 h-1 rounded-full" style={{ background: "var(--border-medium)" }} />
+              </div>
+
+              <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                <div>
+                  <h2 id={titleId} className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
+                  {subtitle && <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{subtitle}</p>}
+                </div>
+                <button ref={closeRef} type="button" onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-full cursor-pointer transition-colors" style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}>
+                  <X size={15} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scroll px-3 py-2" role="list">
+                {meetings.map((meeting, idx) => {
+                  const { bg, color, Icon } = statusConfig(meeting.status);
+                  return (
+                    <motion.button key={meeting.id} onClick={() => { onSelectMeeting(meeting); onClose(); }} className="w-full text-left flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer group" style={{ borderBottom: idx < meetings.length - 1 ? "1px solid var(--border-subtle)" : "none" }} whileHover={{ backgroundColor: "var(--bg-sunken)" }} transition={{ duration: 0.15 }}>
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}><Icon size={14} style={{ color }} /></div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{meeting.name}</span>
+                          <span className="badge flex-shrink-0 text-[10px]" style={{ background: bg, color }}>{meeting.status}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5"><span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{meeting.type}</span><span style={{ color: "var(--text-muted)" }}>· {meeting.time}</span></div>
+                      </div>
+                      <ChevronRight size={14} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "var(--text-muted)" }} />
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
 }
 </file>
 
@@ -5489,43 +5422,118 @@ export type PlanTier = Database["public"]["Enums"]["plan_tier"];
 export type ProvisioningStatus = Database["public"]["Enums"]["provisioning_status"];
 </file>
 
-<file path="package.json">
-{
-  "name": "pyrexx-dashboard",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@supabase/ssr": "^0.12.0",
-    "@supabase/supabase-js": "^2.108.2",
-    "clsx": "^2.1.1",
-    "dodopayments": "^2.39.0",
-    "dodopayments-checkout": "^1.9.4",
-    "framer-motion": "^12.40.0",
-    "lucide-react": "^1.17.0",
-    "next": "16.2.7",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "recharts": "^3.8.1",
-    "retell-sdk": "^5.38.0",
-    "standardwebhooks": "^1.0.0",
-    "tailwind-merge": "^3.6.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.7",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+<file path="src/app/admin/actions.ts">
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import type { ClinicStatus, PlanTier, CrmProvider } from "@/types/database";
+
+async function requireAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  if (profile?.role !== "admin") throw new Error("Not authorized");
+  
+  // Return a fresh Supabase instance using the Service Role to bypass RLS for admin tasks
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  return createAdminClient();
+}
+
+/** CREATE MANUAL CLIENT BYPASSING STRIPE/DODO */
+export async function createManualClient(data: {
+  name: string; contact_email: string; phone_number: string; receptionist_name: string;
+  plan_tier: PlanTier; crm_provider: CrmProvider;
+}) {
+  const supabase = await requireAdmin();
+
+  // Create the clinic, assuming subscription is active immediately
+  const { data: clinic, error } = await supabase
+    .from("clinics")
+    .insert({
+      ...data,
+      plan_price_cents: data.plan_tier === "full_time" ? 150000 : 100000,
+      status: "pending_setup", // Ready for agent provision
+      subscription_status: "active" 
+    })
+    .select("*")
+    .single();
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin");
+  return { success: true, clinicId: clinic.id };
+}
+
+/** DISCONNECT/WIPE AGENT DETAILS */
+export async function disconnectAgent(clinicId: string) {
+  const supabase = await requireAdmin();
+  const { error } = await supabase
+    .from("clinics")
+    .update({
+      agent_id: null,
+      agent_phone_number: null,
+      agent_provisioning_status: "pending"
+    })
+    .eq("id", clinicId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/clients/${clinicId}`);
+  return { success: true };
+}
+
+export async function updateAgentConnection(clinicId: string, data: { agentId: string; agentPhoneNumber: string }) {
+  const supabase = await requireAdmin();
+  const { error } = await supabase
+    .from("clinics")
+    .update({ agent_id: data.agentId.trim() || null, agent_phone_number: data.agentPhoneNumber.trim() || null })
+    .eq("id", clinicId);
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/clients/${clinicId}`);
+  return { success: true };
+}
+
+export async function updateCrmCredentials(clinicId: string, credentials: { apiKey: string; accountIdentifier: string; notes: string }) {
+  const supabase = await requireAdmin();
+  const { error } = await supabase
+    .from("integration_credentials")
+    .upsert({
+        clinic_id: clinicId, provider: "crm",
+        credentials: { api_key: credentials.apiKey.trim(), account_identifier: credentials.accountIdentifier.trim(), notes: credentials.notes.trim() },
+    }, { onConflict: "clinic_id,provider" });
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/clients/${clinicId}`);
+  return { success: true };
+}
+
+export async function updateEscalationNumber(clinicId: string, escalationPhoneNumber: string) {
+  const supabase = await requireAdmin();
+  const { error } = await supabase.from("clinics").update({ escalation_phone_number: escalationPhoneNumber.trim() || null }).eq("id", clinicId);
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/clients/${clinicId}`);
+  return { success: true };
+}
+
+export async function retryProvisioning(clinicId: string) {
+  const supabase = await requireAdmin();
+  const { data: clinic, error: fetchError } = await supabase.from("clinics").select("*").eq("id", clinicId).single();
+  if (fetchError || !clinic) return { error: "Clinic not found" };
+
+  const { provisionAiReceptionistAgent } = await import("@/lib/retell/provision");
+  const result = await provisionAiReceptionistAgent(clinic);
+  revalidatePath(`/admin/clients/${clinicId}`);
+  if (!result.success) return { error: result.error || "Provisioning failed" };
+  return { success: true };
+}
+
+export async function updateClinicStatus(clinicId: string, status: ClinicStatus) {
+  const supabase = await requireAdmin();
+  const { error } = await supabase.from("clinics").update({ status }).eq("id", clinicId);
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/clients/${clinicId}`);
+  revalidatePath("/admin");
+  return { success: true };
 }
 </file>
 
@@ -6013,309 +6021,44 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
 }
 </file>
 
-<file path="src/app/globals.css">
-@import "tailwindcss";
-
-/* ─── Design Tokens ──────────────────────────────────────────────── */
-/* Light mode — soft pastel, clinical-modern, airy */
-:root {
-  /* Surfaces */
-  --bg-base:          #F4F6FF;   /* barely-lavender canvas */
-  --bg-card:          #FFFFFF;
-  --bg-raised:        #FFFFFF;
-  --bg-sunken:        #F0F2FA;
-
-  /* Borders */
-  --border-subtle:    rgba(100, 116, 139, 0.10);
-  --border-medium:    rgba(100, 116, 139, 0.18);
-  --border-strong:    rgba(100, 116, 139, 0.30);
-
-  /* Text */
-  --text-primary:     #111827;
-  --text-secondary:   #4B5563;
-  --text-muted:       #9CA3AF;
-  --text-placeholder: #CBD5E1;
-
-  /* Brand */
-  --teal:             #48C4C6;
-  --purple:           #8952A5;
-  --teal-surface:     #EAF8F8;   /* pastel teal */
-  --purple-surface:   #F2EAFA;   /* pastel purple */
-  --teal-text:        #2B9496;
-  --purple-text:      #6B3D85;
-
-  /* Semantic */
-  --success-surface:  #ECFDF5;
-  --success-text:     #059669;
-  --warning-surface:  #FFFBEB;
-  --warning-text:     #D97706;
-  --error-surface:    #FEF2F2;
-  --error-text:       #DC2626;
-  --info-surface:     #EFF6FF;
-  --info-text:        #2563EB;
-
-  /* Shadows */
-  --shadow-xs:    0 1px 2px rgba(17,24,39,0.04);
-  --shadow-sm:    0 1px 3px rgba(17,24,39,0.04), 0 4px 12px rgba(17,24,39,0.04);
-  --shadow-md:    0 4px 16px rgba(17,24,39,0.06), 0 1px 4px rgba(17,24,39,0.04);
-  --shadow-lg:    0 8px 32px rgba(17,24,39,0.08), 0 2px 8px rgba(17,24,39,0.04);
-  --shadow-xl:    0 16px 48px rgba(17,24,39,0.10), 0 4px 16px rgba(17,24,39,0.06);
-  --shadow-float: 0 20px 60px rgba(17,24,39,0.12), 0 6px 20px rgba(17,24,39,0.06);
-
-  /* Toggle — light mode pill */
-  --toggle-bg:        #DDE1F0;
-  --toggle-active-bg: #FFFFFF;
-  --toggle-active-fg: #F59E0B;  /* sun amber */
-  --toggle-inactive-fg: #94A3B8;
-
-  /* Loading-animation logo colors — sampled from the official mark.
-     Outline = dark charcoal (matches the real logo on light surfaces).
-     Gap = the white/cream cutout color between ribbons. */
-  --logo-outline: #211C2E;
-  --logo-gap:     #FFFFFF;
-
-  color-scheme: light;
-}
-
-/* Dark mode */
-/*
-  REDESIGNED — previous dark theme (#0D0818 base / #160B24 cards) read
-  as near-black and crushed contrast between surfaces. New palette is
-  a lighter "midnight slate-purple": surfaces sit ~8-10% lighter, with
-  more visible borders and brighter secondary text, while keeping the
-  same brand-purple undertone.
-*/
-html.dark {
-  --bg-base:          #1A1626;   /* was #0D0818 — lighter charcoal-purple canvas */
-  --bg-card:          #251F38;   /* was #160B24 */
-  --bg-raised:        #302849;   /* was #1E0F30 */
-  --bg-sunken:        #150F20;   /* was #0A0514 */
-
-  --border-subtle:    rgba(176, 145, 214, 0.14);
-  --border-medium:    rgba(176, 145, 214, 0.24);
-  --border-strong:    rgba(176, 145, 214, 0.42);
-
-  --text-primary:     #F5F3FA;   /* brighter than #F1F5F9 for better contrast */
-  --text-secondary:   #ADA3C4;   /* was #94A3B8 — warmer + lighter */
-  --text-muted:       #7E7396;   /* was #64748B */
-  --text-placeholder: #443B5C;
-
-  --teal-surface:     rgba(72, 196, 198, 0.13);
-  --purple-surface:   rgba(137, 82, 165, 0.16);
-  --teal-text:        #6EE0E2;
-  --purple-text:      #C09AE0;
-
-  --success-surface:  rgba(5, 150, 105, 0.16);
-  --success-text:     #3EE6AD;
-  --warning-surface:  rgba(217, 119, 6, 0.16);
-  --warning-text:     #FDD877;
-  --error-surface:    rgba(220, 38, 38, 0.16);
-  --error-text:       #FF8A8A;
-  --info-surface:     rgba(37, 99, 235, 0.16);
-  --info-text:        #7DB4FF;
-
-  --shadow-xs:    0 1px 2px rgba(0,0,0,0.30);
-  --shadow-sm:    0 1px 3px rgba(0,0,0,0.30), 0 4px 14px rgba(0,0,0,0.22);
-  --shadow-md:    0 4px 18px rgba(0,0,0,0.32), 0 1px 4px rgba(0,0,0,0.24);
-  --shadow-lg:    0 8px 36px rgba(0,0,0,0.38), 0 2px 10px rgba(0,0,0,0.26);
-  --shadow-xl:    0 18px 52px rgba(0,0,0,0.42), 0 4px 18px rgba(0,0,0,0.30);
-  --shadow-float: 0 22px 64px rgba(0,0,0,0.50), 0 6px 22px rgba(137,82,165,0.20);
-
-  --toggle-bg:        #150F20;
-  --toggle-active-bg: #302849;
-  --toggle-active-fg: #A78CF0;  /* moon indigo — slightly brighter on lighter bg */
-  --toggle-inactive-fg: #5E5478;
-
-  /* Loading-animation logo colors for dark mode — outline becomes a
-     soft muted lavender-gray (visible but gentle against the lighter
-     dark base), gap stays a soft off-white for a subtle glow. */
-  --logo-outline: #564A78;
-  --logo-gap:     #F4F1FA;
-
-  color-scheme: dark;
-}
-
-/* ─── Tailwind v4 Theme Registration ────────────────────────────── */
-@theme inline {
-  --color-background: var(--bg-base);
-  --color-foreground: var(--text-primary);
-  --color-card:       var(--bg-card);
-
-  /* Pyrexx brand */
-  --color-pyrexx-blue:    #48C4C6;
-  --color-pyrexx-purple:  #8952A5;
-  --color-pyrexx-darkBg:  #1A1626;
-  --color-pyrexx-darkCard:#251F38;
-  --color-pyrexx-surface: #302849;
-
-  --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
-}
-
-/* ─── Base Styles ────────────────────────────────────────────────── */
-body {
-  background-color: var(--bg-base);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* ─── Dashboard dot-grid background (light only) ─────────────────── */
-.dashboard-bg {
-  background-color: var(--bg-base);
-  background-image: radial-gradient(
-    circle,
-    rgba(100, 116, 139, 0.10) 1px,
-    transparent 1px
-  );
-  background-size: 24px 24px;
-}
-html.dark .dashboard-bg {
-  background-image: radial-gradient(
-    circle,
-    rgba(137, 82, 165, 0.06) 1px,
-    transparent 1px
-  );
-}
-
-/* ─── Card base ──────────────────────────────────────────────────── */
-.card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
-  border-radius: 1.25rem;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-.card-hover:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-/* ─── Toggle pill ─────────────────────────────────────────────────── */
-.theme-toggle-pill {
-  display: flex;
-  align-items: center;
-  padding: 3px;
-  border-radius: 9999px;
-  background: var(--toggle-bg);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.10), inset 0 1px 2px rgba(0,0,0,0.07);
-}
-html.dark .theme-toggle-pill {
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.40), inset 0 1px 3px rgba(0,0,0,0.30);
-}
-.theme-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  transition: all 0.22s cubic-bezier(0.34, 1.2, 0.64, 1);
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  color: var(--toggle-inactive-fg);
-}
-.theme-toggle-btn.active {
-  background: var(--toggle-active-bg);
-  color: var(--toggle-active-fg);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06);
-}
-
-/* ─── Status badges ──────────────────────────────────────────────── */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-/* ─── Scrollbar ─────────────────────────────────────────────────── */
-.custom-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-medium) transparent;
-}
-.custom-scroll::-webkit-scrollbar { width: 4px; }
-.custom-scroll::-webkit-scrollbar-track { background: transparent; }
-.custom-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-radius: 9999px;
-}
-
-/* ─── Focus visible ──────────────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid #48C4C6;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* ─── Reduced motion ─────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+<file path="package.json">
+{
+  "name": "pyrexx-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
+    "clsx": "^2.1.1",
+    "dodopayments": "^2.39.0",
+    "dodopayments-checkout": "^1.9.4",
+    "framer-motion": "^12.40.0",
+    "lucide-react": "^1.17.0",
+    "next": "16.2.7",
+    "next-themes": "^0.4.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1",
+    "retell-sdk": "^5.38.0",
+    "standardwebhooks": "^1.0.0",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
-}
-
-/* ─── Touch optimisation ─────────────────────────────────────────── */
-button, [role="button"] {
-  touch-action: manipulation;
-}
-
-html { scroll-behavior: smooth; }
-</file>
-
-<file path="src/app/page.tsx">
-"use client";
-
-// FIX [4]: This file must stay "use client" because it uses AnimatePresence.
-// Metadata is now handled in layout.tsx (applies to all pages).
-// For a multi-page app, create src/app/page-shell.tsx as server + import a
-// "use client" PageClient component to get per-page metadata working.
-
-import { useState, useEffect } from "react";
-import { AnimatePresence } from "framer-motion";
-import LoadingAnimation from "@/components/LoadingAnimation";
-import DashboardHome from "@/components/DashboardHome";
-
-export default function Home() {
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // FIX [6]: Skip the splash on return visits within the same session.
-    // First visit: show 1400ms splash (down from 3200ms). Return visits: instant.
-    const hasVisited = sessionStorage.getItem("pyrexx-loaded");
-
-    if (hasVisited) {
-      setIsLoading(false);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-      sessionStorage.setItem("pyrexx-loaded", "1");
-    }, 1400);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <main className="relative min-h-screen overflow-hidden">
-      <AnimatePresence mode="wait">
-        {isLoading ? (
-          <LoadingAnimation key="loading" />
-        ) : (
-          <DashboardHome key="dashboard" />
-        )}
-      </AnimatePresence>
-    </main>
-  );
 }
 </file>
 
@@ -6353,79 +6096,277 @@ const config: Config = {
 export default config;
 </file>
 
-<file path="src/app/layout.tsx">
-import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
+<file path="src/app/globals.css">
+@import "tailwindcss";
 
-// FIX [2]: Use `variable` so the font is available as a CSS var (--font-inter)
-// that @theme can reference, rather than only as a className
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap", // FIX: prevents FOIT (invisible text during font load)
-});
+/* ─── Design Tokens ──────────────────────────────────────────────── */
+/* Light mode — soft pastel, clinical-modern, airy, reduced glare */
+:root {
+  /* Surfaces - Softened to reduce glare */
+  --bg-base:          #F8FAFC;   
+  --bg-card:          #FFFFFF;
+  --bg-raised:        #FFFFFF;
+  --bg-sunken:        #F1F5F9;
 
-export const metadata: Metadata = {
-  title: "Pyrexx AI | Dashboard",
-  description:
-    "Monitor your AI receptionist performance — call pickup rates, bookings, transcripts, and more.",
-  robots: { index: false, follow: false }, // Private dashboard — keep off search
-  // FIX: Favicon now comes from the Next.js FILE-BASED icon convention —
-  // src/app/icon.png and src/app/apple-icon.png — rather than this
-  // metadata.icons field. The two approaches can conflict/override each
-  // other unpredictably, and a stray default `favicon.ico` left over from
-  // create-next-app scaffolding (if one exists in src/app/) will often win
-  // over this field in real browsers regardless of what's declared here.
-  // If a `src/app/favicon.ico` file exists in this project, DELETE IT —
-  // its mere presence can keep showing the old default icon even with
-  // icon.png present alongside it.
-};
+  /* Borders */
+  --border-subtle:    rgba(100, 116, 139, 0.12);
+  --border-medium:    rgba(100, 116, 139, 0.20);
+  --border-strong:    rgba(100, 116, 139, 0.35);
 
-// FIX: Explicit viewport export (Next.js 14+ best practice; ensures no zoom disable)
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  // never set maximumScale/userScalable here — that would violate WCAG 1.4.4
-};
+  /* Text - Darkened for higher contrast and readability */
+  --text-primary:     #0F172A;
+  --text-secondary:   #334155;
+  --text-muted:       #64748B;
+  --text-placeholder: #94A3B8;
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+  /* Brand */
+  --teal:             #48C4C6;
+  --purple:           #8952A5;
+  --teal-surface:     #EAF8F8;   
+  --purple-surface:   #F2EAFA;   
+  --teal-text:        #217A7B;
+  --purple-text:      #5B3373;
+
+  /* Semantic */
+  --success-surface:  #ECFDF5;
+  --success-text:     #047857;
+  --warning-surface:  #FFFBEB;
+  --warning-text:     #B45309;
+  --error-surface:    #FEF2F2;
+  --error-text:       #B91C1C;
+  --info-surface:     #EFF6FF;
+  --info-text:        #1D4ED8;
+
+  /* Shadows */
+  --shadow-xs:    0 1px 2px rgba(15,23,42,0.04);
+  --shadow-sm:    0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.03);
+  --shadow-md:    0 4px 16px rgba(15,23,42,0.05), 0 1px 4px rgba(15,23,42,0.03);
+  --shadow-lg:    0 8px 32px rgba(15,23,42,0.06), 0 2px 8px rgba(15,23,42,0.03);
+  --shadow-xl:    0 16px 48px rgba(15,23,42,0.08), 0 4px 16px rgba(15,23,42,0.04);
+  --shadow-float: 0 20px 60px rgba(15,23,42,0.10), 0 6px 20px rgba(15,23,42,0.04);
+
+  /* Toggle — light mode pill */
+  --toggle-bg:        #E2E8F0;
+  --toggle-active-bg: #FFFFFF;
+  --toggle-active-fg: #D97706;  
+  --toggle-inactive-fg: #64748B;
+
+  /* Loading-animation logo colors */
+  --logo-outline: #1E293B;
+  --logo-gap:     #FFFFFF;
+
+  color-scheme: light;
+}
+
+/* Dark mode */
+html.dark {
+  --bg-base:          #1A1626;   
+  --bg-card:          #251F38;   
+  --bg-raised:        #302849;   
+  --bg-sunken:        #150F20;   
+
+  --border-subtle:    rgba(176, 145, 214, 0.14);
+  --border-medium:    rgba(176, 145, 214, 0.24);
+  --border-strong:    rgba(176, 145, 214, 0.42);
+
+  --text-primary:     #F5F3FA;   
+  --text-secondary:   #ADA3C4;   
+  --text-muted:       #7E7396;   
+  --text-placeholder: #443B5C;
+
+  --teal-surface:     rgba(72, 196, 198, 0.13);
+  --purple-surface:   rgba(137, 82, 165, 0.16);
+  --teal-text:        #6EE0E2;
+  --purple-text:      #C09AE0;
+
+  --success-surface:  rgba(5, 150, 105, 0.16);
+  --success-text:     #3EE6AD;
+  --warning-surface:  rgba(217, 119, 6, 0.16);
+  --warning-text:     #FDD877;
+  --error-surface:    rgba(220, 38, 38, 0.16);
+  --error-text:       #FF8A8A;
+  --info-surface:     rgba(37, 99, 235, 0.16);
+  --info-text:        #7DB4FF;
+
+  --shadow-xs:    0 1px 2px rgba(0,0,0,0.30);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.30), 0 4px 14px rgba(0,0,0,0.22);
+  --shadow-md:    0 4px 18px rgba(0,0,0,0.32), 0 1px 4px rgba(0,0,0,0.24);
+  --shadow-lg:    0 8px 36px rgba(0,0,0,0.38), 0 2px 10px rgba(0,0,0,0.26);
+  --shadow-xl:    0 18px 52px rgba(0,0,0,0.42), 0 4px 18px rgba(0,0,0,0.30);
+  --shadow-float: 0 22px 64px rgba(0,0,0,0.50), 0 6px 22px rgba(137,82,165,0.20);
+
+  --toggle-bg:        #150F20;
+  --toggle-active-bg: #302849;
+  --toggle-active-fg: #A78CF0;  
+  --toggle-inactive-fg: #5E5478;
+
+  --logo-outline: #564A78;
+  --logo-gap:     #F4F1FA;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --color-card:       var(--bg-card);
+
+  --color-pyrexx-blue:    #48C4C6;
+  --color-pyrexx-purple:  #8952A5;
+  --color-pyrexx-darkBg:  #1A1626;
+  --color-pyrexx-darkCard:#251F38;
+  --color-pyrexx-surface: #302849;
+
+  --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dashboard-bg {
+  background-color: var(--bg-base);
+  background-image: radial-gradient(
+    circle,
+    rgba(100, 116, 139, 0.12) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+html.dark .dashboard-bg {
+  background-image: radial-gradient(
+    circle,
+    rgba(137, 82, 165, 0.08) 1px,
+    transparent 1px
+  );
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
+  border-radius: 1.25rem;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.theme-toggle-pill {
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--toggle-bg);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06), inset 0 1px 2px rgba(0,0,0,0.04);
+}
+html.dark .theme-toggle-pill {
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.40), inset 0 1px 3px rgba(0,0,0,0.30);
+}
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: all 0.22s cubic-bezier(0.34, 1.2, 0.64, 1);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--toggle-inactive-fg);
+}
+.theme-toggle-btn.active {
+  background: var(--toggle-active-bg);
+  color: var(--toggle-active-fg);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.custom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) transparent;
+}
+.custom-scroll::-webkit-scrollbar { width: 4px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 9999px;
+}
+
+:focus-visible {
+  outline: 2px solid #48C4C6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+button, [role="button"] { touch-action: manipulation; }
+html { scroll-behavior: smooth; }
+</file>
+
+<file path="src/app/page.tsx">
+"use client";
+
+import { useState, useEffect, Suspense } from "react";
+import { AnimatePresence } from "framer-motion";
+import LoadingAnimation from "@/components/LoadingAnimation";
+import DashboardHome from "@/components/DashboardHome";
+
+export default function Home() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const hasVisited = sessionStorage.getItem("pyrexx-loaded");
+
+    if (hasVisited) {
+      setIsLoading(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+      sessionStorage.setItem("pyrexx-loaded", "1");
+    }, 1400);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    // FIX [3]: No hardcoded light-mode classes on <body>.
-    // bg/fg come from CSS vars (var(--background), var(--foreground)) set in globals.css
-    // The `dark` class is applied by the anti-flash script below before first paint.
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        {/*
-          FIX [5] + FIX [20]: Dark mode anti-flash script.
-          Runs synchronously before the page renders, reads localStorage,
-          and applies the `dark` class to <html> — zero flash of wrong theme.
-          suppressHydrationWarning on <html> silences React's hydration mismatch warning.
-        */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var theme = localStorage.getItem('pyrexx-theme');
-                if (theme === 'dark') {
-                  document.documentElement.classList.add('dark');
-                }
-              } catch (e) {}
-            `,
-          }}
-        />
-      </head>
-      <body
-        className={`${inter.variable} font-sans antialiased`}
-        // FIX [3]: bg/fg from CSS vars — no hardcoded Tailwind color overrides
-      >
-        {children}
-      </body>
-    </html>
+    <main className="relative min-h-screen overflow-hidden">
+      <AnimatePresence mode="wait">
+        {isLoading ? (
+          <LoadingAnimation key="loading" />
+        ) : (
+          <Suspense key="dashboard" fallback={null}>
+            <DashboardHome />
+          </Suspense>
+        )}
+      </AnimatePresence>
+    </main>
   );
 }
 </file>
@@ -6664,6 +6605,46 @@ export default function MeetingModal({ isOpen, onClose, meeting }: MeetingModalP
         </div>
       )}
     </AnimatePresence>
+  );
+}
+</file>
+
+<file path="src/app/layout.tsx">
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "Pyrexx AI | Dashboard",
+  description: "Monitor your AI receptionist performance.",
+  robots: { index: false, follow: false },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {children}
+        </ThemeProvider>
+      </body>
+    </html>
   );
 }
 </file>
@@ -6915,6 +6896,8 @@ export default function LoadingAnimation() {
 "use client";
 
 import { useState, useEffect, useId } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Sun, Moon, LayoutDashboard, BarChart3,
@@ -6929,8 +6912,8 @@ import LogoMark from "./LogoMark";
 import AnalyticsPanel from "./AnalyticsPanel";
 import ProfilePanel from "./ProfilePanel";
 import { createClient } from "@/lib/supabase/client";
+import ThemeToggle from "./ui/ThemeToggle";
 
-/* ─── Framer Motion variants ────────────────────────────────────── */
 const containerV: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, ease: "easeOut" } },
@@ -6940,7 +6923,7 @@ const itemV: Variants = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
 };
 
-/* ─── Data ──────────────────────────────────────────────────────── */
+/* ─── Mock Data ─────────────────────────────────────────────────── */
 const recentCalls: Meeting[] = [
   { id: 1, name: "Sarah Jenkins",  type: "Botox Consult",    time: "Today, 10:00 AM",    status: "Completed", transcriptPreview: "Client asked about recovery time. AI explained 24-48h, booked follow-up." },
   { id: 2, name: "Mike Ross",      type: "Back Massage",     time: "Yesterday, 2:30 PM", status: "Completed", transcriptPreview: "60-min deep tissue confirmed. Intake forms sent via SMS." },
@@ -6965,7 +6948,6 @@ const upcomingBookings: Meeting[] = [
   { id: 15, name: "Nina Wolff",      type: "Chemical Peel",   time: "Thu, 10:00 AM",     status: "Scheduled", transcriptPreview: "Patch test completed. Green-listed for treatment." },
 ];
 
-/* ─── Helpers ───────────────────────────────────────────────────── */
 function statusStyle(status: string) {
   switch (status) {
     case "Completed": return { bg: "var(--success-surface)", color: "var(--success-text)", Icon: CheckCircle2 };
@@ -6975,135 +6957,52 @@ function statusStyle(status: string) {
   }
 }
 
-/* ─── MeetingRow — used inside ListCards ────────────────────────── */
 function MeetingRow({ meeting, onSelect }: { meeting: Meeting; onSelect: (m: Meeting) => void }) {
   const { bg, color, Icon } = statusStyle(meeting.status);
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(meeting)}
-      aria-label={`View ${meeting.name} — ${meeting.type}`}
-      className="w-full text-left flex items-center gap-3 px-1 py-2.5 rounded-xl cursor-pointer group transition-colors"
-      style={{ borderBottom: "1px solid var(--border-subtle)" }}
-      onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")}
-      onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
-    >
-      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-        <Icon size={12} style={{ color }} aria-hidden="true" />
-      </div>
+    <button type="button" onClick={() => onSelect(meeting)} className="w-full text-left flex items-center gap-3 px-1 py-2.5 rounded-xl cursor-pointer group transition-colors" style={{ borderBottom: "1px solid var(--border-subtle)" }} onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")} onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}>
+      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}><Icon size={12} style={{ color }} aria-hidden="true" /></div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{meeting.name}</p>
-        <p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>
-          {meeting.type}
-          {meeting.bookedAt
-            ? <span style={{ color: "var(--teal-text)" }}> · {meeting.bookedAt}</span>
-            : <span> · {meeting.time}</span>
-          }
-        </p>
+        <p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{meeting.type}{meeting.bookedAt ? <span style={{ color: "var(--teal-text)" }}> · {meeting.bookedAt}</span> : <span> · {meeting.time}</span>}</p>
       </div>
-      <ChevronRight size={12} className="flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity"
-        style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+      <ChevronRight size={12} className="flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
     </button>
   );
 }
 
-/* ─── ListCard ──────────────────────────────────────────────────── */
-interface ListCardProps {
-  title: string;
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-  meetings: Meeting[];
-  onSelectMeeting: (m: Meeting) => void;
-  onViewAll: () => void;
-}
-function ListCard({ title, icon: Icon, iconBg, iconColor, meetings, onSelectMeeting, onViewAll }: ListCardProps) {
+function ListCard({ title, icon: Icon, iconBg, iconColor, meetings, onSelectMeeting, onViewAll }: any) {
   const preview = meetings.slice(0, 3);
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-3">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
-            <Icon size={14} style={{ color: iconColor }} aria-hidden="true" />
-          </div>
+          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}><Icon size={14} style={{ color: iconColor }} aria-hidden="true" /></div>
           <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
         </div>
-        <button
-          type="button"
-          onClick={onViewAll}
-          aria-label={`View all ${title}`}
-          className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer transition-colors rounded-lg px-2 py-1"
-          style={{ color: iconColor, background: iconBg }}
-          onMouseOver={(e) => (e.currentTarget.style.opacity = "0.75")}
-          onMouseOut={(e) => (e.currentTarget.style.opacity = "1")}
-        >
+        <button type="button" onClick={onViewAll} className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer transition-colors rounded-lg px-2 py-1" style={{ color: iconColor, background: iconBg }} onMouseOver={(e) => (e.currentTarget.style.opacity = "0.75")} onMouseOut={(e) => (e.currentTarget.style.opacity = "1")}>
           View all <ChevronRight size={11} aria-hidden="true" />
         </button>
       </div>
-
-      {/* 3-item preview — NOT scrollable (user navigates screen freely) */}
-      <div role="list" className="flex flex-col">
-        {preview.map((m) => (
-          <MeetingRow key={m.id} meeting={m} onSelect={onSelectMeeting} />
-        ))}
-      </div>
+      <div role="list" className="flex flex-col">{preview.map((m: any) => (<MeetingRow key={m.id} meeting={m} onSelect={onSelectMeeting} />))}</div>
     </motion.section>
   );
 }
 
-/* ─── InsightsCard ──────────────────────────────────────────────── */
 function InsightsCard() {
   const intents = [
-    { label: "Botox / Injectables", pct: 45, color: "var(--teal)" },
-    { label: "Massage & Body",       pct: 28, color: "var(--purple)" },
-    { label: "Facials & Skin",       pct: 18, color: "#60A5FA" },
-    { label: "General Inquiries",    pct: 9,  color: "#F59E0B" },
+    { label: "Botox / Injectables", pct: 45, color: "var(--teal)" }, { label: "Massage & Body", pct: 28, color: "var(--purple)" },
+    { label: "Facials & Skin", pct: 18, color: "#60A5FA" }, { label: "General Inquiries", pct: 9, color: "#F59E0B" },
   ];
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
-          <Zap size={14} style={{ color: "var(--teal)" }} aria-hidden="true" />
-        </div>
-        <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Call Intents</h2>
-      </div>
-
-      {/* Stacked bar */}
-      <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img" aria-label="Intent distribution bar">
-        {intents.map((i) => (
-          <div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />
-        ))}
-      </div>
-
-      {/* Legend rows */}
-      <ul className="space-y-2.5" role="list">
-        {intents.map((i) => (
-          <li key={i.label}>
-            <div className="flex justify-between items-center mb-1">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i.color }} aria-hidden="true" />
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{i.label}</span>
-              </div>
-              <span className="text-xs font-bold" style={{ color: i.color }}>{i.pct}%</span>
-            </div>
-            <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
-              role="progressbar" aria-valuenow={i.pct} aria-valuemin={0} aria-valuemax={100}
-              aria-label={`${i.label}: ${i.pct}%`}>
-              <motion.div className="h-full rounded-full"
-                style={{ background: i.color }}
-                initial={{ width: 0 }}
-                animate={{ width: `${i.pct}%` }}
-                transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} />
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}><Zap size={14} style={{ color: "var(--teal)" }} aria-hidden="true" /></div><h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Call Intents</h2></div>
+      <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img">{intents.map((i) => (<div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />))}</div>
+      <ul className="space-y-2.5" role="list">{intents.map((i) => (<li key={i.label}><div className="flex justify-between items-center mb-1"><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i.color }} aria-hidden="true" /><span className="text-xs" style={{ color: "var(--text-secondary)" }}>{i.label}</span></div><span className="text-xs font-bold" style={{ color: i.color }}>{i.pct}%</span></div><div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}><motion.div className="h-full rounded-full" style={{ background: i.color }} initial={{ width: 0 }} animate={{ width: `${i.pct}%` }} transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} /></div></li>))}</ul>
     </motion.section>
   );
 }
 
-/* ─── OutcomesCard ──────────────────────────────────────────────── */
 function OutcomesCard() {
   const outcomes = [
     { label: "Appointment Booked",  count: 38, Icon: CheckCircle2, bg: "var(--success-surface)", color: "var(--success-text)" },
@@ -7113,282 +7012,131 @@ function OutcomesCard() {
   const total = outcomes.reduce((s, o) => s + o.count, 0);
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--purple-surface)" }}>
-          <TrendingUp size={14} style={{ color: "var(--purple)" }} aria-hidden="true" />
-        </div>
-        <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Outcomes</h2>
-        <span className="ml-auto text-xs font-semibold badge"
-          style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}>
-          {total} today
-        </span>
-      </div>
-      <ul className="space-y-3" role="list">
-        {outcomes.map(({ label, count, Icon, bg, color }) => {
-          const pct = Math.round((count / total) * 100);
-          return (
-            <li key={label} className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-                <Icon size={14} style={{ color }} aria-hidden="true" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
-                  <span className="text-xs font-bold" style={{ color }}>{count}</span>
-                </div>
-                <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
-                  role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
-                  <motion.div className="h-full rounded-full" style={{ background: color }}
-                    initial={{ width: 0 }} animate={{ width: `${pct}%` }}
-                    transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }} />
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--purple-surface)" }}><TrendingUp size={14} style={{ color: "var(--purple)" }} aria-hidden="true" /></div><h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Outcomes</h2><span className="ml-auto text-xs font-semibold badge" style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}>{total} today</span></div>
+      <ul className="space-y-3" role="list">{outcomes.map(({ label, count, Icon, bg, color }) => { const pct = Math.round((count / total) * 100); return (<li key={label} className="flex items-center gap-3"><div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}><Icon size={14} style={{ color }} aria-hidden="true" /></div><div className="flex-1 min-w-0"><div className="flex justify-between items-center mb-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span><span className="text-xs font-bold" style={{ color }}>{count}</span></div><div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}><motion.div className="h-full rounded-full" style={{ background: color }} initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }} /></div></div></li>); })}</ul>
     </motion.section>
   );
 }
 
-/* ─── Dashboard Panel ───────────────────────────────────────────── */
-type ModalKey = "recent" | "booked" | "upcoming" | null;
 function DashboardPanel({ onSelectMeeting }: { onSelectMeeting: (m: Meeting) => void }) {
-  const [openList, setOpenList] = useState<ModalKey>(null);
+  const [openList, setOpenList] = useState<"recent" | "booked" | "upcoming" | null>(null);
   return (
     <>
-      {/* KPI row */}
       <motion.div variants={itemV} className="grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-5">
-        <DonutChart title="Pickup Rate"  value="98.5%" percentage={98.5} subtitle="+2.1% vs last wk"
-          trend={{ direction: "up", label: "2.1%" }} />
-        <DonutChart title="Conversion"  value="42.3%" percentage={42.3} subtitle="+5.4% vs last wk"
-          trend={{ direction: "up", label: "5.4%" }} />
-        <DonutChart title="Total Calls" value="1,245"  percentage={75}   subtitle="245 this week"
-          trend={{ direction: "up", label: "12%" }} />
+        <DonutChart title="Pickup Rate" value="98.5%" percentage={98.5} subtitle="+2.1% vs last wk" trend={{ direction: "up", label: "2.1%" }} />
+        <DonutChart title="Conversion" value="42.3%" percentage={42.3} subtitle="+5.4% vs last wk" trend={{ direction: "up", label: "5.4%" }} />
+        <DonutChart title="Total Calls" value="1,245" percentage={75} subtitle="245 this week" trend={{ direction: "up", label: "12%" }} />
       </motion.div>
-
-      {/* Three activity cards — Recent · Booked · Upcoming */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-4 mb-4 md:mb-5">
-        <ListCard title="Recent Calls"
-          icon={CalendarCheck} iconBg="var(--teal-surface)" iconColor="var(--teal-text)"
-          meetings={recentCalls} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("recent")} />
-        <ListCard title="Recently Booked"
-          icon={Sparkles} iconBg="var(--purple-surface)" iconColor="var(--purple-text)"
-          meetings={recentlyBooked} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("booked")} />
-        <ListCard title="Upcoming"
-          icon={CalendarClock} iconBg="var(--info-surface)" iconColor="var(--info-text)"
-          meetings={upcomingBookings} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("upcoming")} />
+        <ListCard title="Recent Calls" icon={CalendarCheck} iconBg="var(--teal-surface)" iconColor="var(--teal-text)" meetings={recentCalls} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("recent")} />
+        <ListCard title="Recently Booked" icon={Sparkles} iconBg="var(--purple-surface)" iconColor="var(--purple-text)" meetings={recentlyBooked} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("booked")} />
+        <ListCard title="Upcoming" icon={CalendarClock} iconBg="var(--info-surface)" iconColor="var(--info-text)" meetings={upcomingBookings} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("upcoming")} />
       </div>
-
-      {/* Insights row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <InsightsCard />
         <OutcomesCard />
       </div>
-
-      {/* List modals */}
-      <ListModal isOpen={openList === "recent"}   onClose={() => setOpenList(null)}
-        title="Recent Calls" subtitle="All completed AI calls"
-        meetings={recentCalls} onSelectMeeting={onSelectMeeting} variant="recent" />
-      <ListModal isOpen={openList === "booked"}   onClose={() => setOpenList(null)}
-        title="Recently Booked" subtitle="Bookings captured by AI"
-        meetings={recentlyBooked} onSelectMeeting={onSelectMeeting} variant="booked" />
-      <ListModal isOpen={openList === "upcoming"} onClose={() => setOpenList(null)}
-        title="Upcoming Appointments" subtitle="Scheduled via AI receptionist"
-        meetings={upcomingBookings} onSelectMeeting={onSelectMeeting} variant="upcoming" />
+      <ListModal isOpen={openList === "recent"} onClose={() => setOpenList(null)} title="Recent Calls" subtitle="All completed AI calls" meetings={recentCalls} onSelectMeeting={onSelectMeeting} variant="recent" />
+      <ListModal isOpen={openList === "booked"} onClose={() => setOpenList(null)} title="Recently Booked" subtitle="Bookings captured by AI" meetings={recentlyBooked} onSelectMeeting={onSelectMeeting} variant="booked" />
+      <ListModal isOpen={openList === "upcoming"} onClose={() => setOpenList(null)} title="Upcoming Appointments" subtitle="Scheduled via AI receptionist" meetings={upcomingBookings} onSelectMeeting={onSelectMeeting} variant="upcoming" />
     </>
   );
 }
 
-/* ─── Main Component ────────────────────────────────────────────── */
-type TabId = "dashboard" | "analytics" | "profile";
-const TABS: { id: TabId; icon: React.ElementType; label: string }[] = [
+const TABS = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { id: "analytics", icon: BarChart3,       label: "Analytics"  },
-  { id: "profile",   icon: UserCircle2,     label: "Profile"   },
+  { id: "analytics", icon: BarChart3, label: "Analytics" },
+  { id: "profile", icon: UserCircle2, label: "Profile" },
 ];
 
 export default function DashboardHome() {
-  const [activeTab, setActiveTab]       = useState<TabId>("dashboard");
-  const [selectedMeeting, setSelected]  = useState<Meeting | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { resolvedTheme, setTheme } = useTheme();
   
-  const [isDark, setIsDark]             = useState<boolean>(false);
-  const [clinicId, setClinicId]         = useState<string | undefined>();
-  const [mounted, setMounted]           = useState(false);
+  const activeTab = searchParams.get("tab") || "dashboard";
+  
+  const [selectedMeeting, setSelected] = useState<Meeting | null>(null);
+  const [clinicId, setClinicId] = useState<string | undefined>();
+  const [mounted, setMounted] = useState(false);
   const tabPanelId = useId();
 
   useEffect(() => {
     setMounted(true);
-    
-    // Sync state with DOM immediately after mount to prevent hydration errors
-    const isDarkMode = document.documentElement.classList.contains("dark");
-    setIsDark(isDarkMode);
-
-    // Fetch the clinic ID for the Profile panel so billing links function
     async function fetchUserContext() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-        if (profile?.clinic_id) {
-          setClinicId(profile.clinic_id);
-        }
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+        if (profile?.clinic_id) setClinicId(profile.clinic_id);
       }
     }
     fetchUserContext();
   }, []);
 
-  const toggleTheme = (dark: boolean) => {
-    setIsDark(dark);
-    const root = document.documentElement;
-    if (dark) {
-      root.classList.add("dark");
-      localStorage.setItem("pyrexx-theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("pyrexx-theme", "light");
-    }
+  const handleTabChange = (tabId: string) => {
+    router.replace(`${pathname}?tab=${tabId}`, { scroll: false });
   };
+
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <div className="min-h-screen font-sans dashboard-bg">
-      {/* ── Header ────────────────────────────────────────────── */}
       <motion.header
-        className="sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 flex items-center gap-3"
-        style={{
-          background: isDark
-            ? "rgba(13,8,24,0.80)"
-            : "rgba(244,246,255,0.80)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderBottom: "1px solid var(--border-subtle)",
-        }}
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-      >
-        {/* Logo + wordmark */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <LogoMark size={36} />
-          <div>
-            <h1 className="text-base md:text-lg font-extrabold leading-tight tracking-tight"
-              style={{ color: "var(--text-primary)" }}>
-              <span style={{ color: "var(--teal)" }}>Pyrexx</span> AI
-            </h1>
-            <p className="text-[10px] hidden sm:block font-medium leading-tight"
-              style={{ color: "var(--text-muted)" }}>
-              AI Receptionist
-            </p>
-          </div>
-        </div>
+				className="sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 flex items-center gap-3"
+				style={{
+					background: isDark ? "rgba(13,8,24,0.80)" : "rgba(248,250,252,0.80)",
+					backdropFilter: "blur(16px)",
+					borderBottom: "1px solid var(--border-subtle)",
+				}}
+				initial={{ opacity: 0, y: -8 }}
+				animate={{ opacity: 1, y: 0 }}
+			>
+				<div className="flex items-center gap-2.5 flex-shrink-0">
+					<LogoMark size={36} />
+					<div>
+						<h1 className="text-base md:text-lg font-extrabold leading-tight tracking-tight" style={{ color: "var(--text-primary)" }}>
+							<span style={{ color: "var(--teal)" }}>Pyrexx</span> AI
+						</h1>
+						<p className="text-[10px] hidden sm:block font-medium leading-tight" style={{ color: "var(--text-muted)" }}>AI Receptionist</p>
+					</div>
+				</div>
+				<div className="flex-1" />
+				<ThemeToggle />
+			</motion.header>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Theme toggle — sun/moon pill with depression effect */}
-        {mounted && (
-          <div className="theme-toggle-pill flex-shrink-0" role="group" aria-label="Color theme">
-            <button
-              type="button"
-              onClick={() => toggleTheme(false)}
-              aria-label="Light mode"
-              aria-pressed={!isDark}
-              className={`theme-toggle-btn${!isDark ? " active" : ""}`}
-            >
-              <Sun size={14} aria-hidden="true" />
-              <span className="hidden sm:inline">Light</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleTheme(true)}
-              aria-label="Dark mode"
-              aria-pressed={isDark}
-              className={`theme-toggle-btn${isDark ? " active" : ""}`}
-            >
-              <Moon size={14} aria-hidden="true" />
-              <span className="hidden sm:inline">Dark</span>
-            </button>
-          </div>
-        )}
-      </motion.header>
-
-      {/* ── Tab panel ─────────────────────────────────────────── */}
-      <main
-        id={`${tabPanelId}-panel`}
-        className="px-4 md:px-8 pt-5 pb-28"
-        aria-live="polite"
-      >
+      <main id={`${tabPanelId}-panel`} className="px-4 md:px-8 pt-5 pb-28">
         <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            variants={containerV}
-            initial="hidden"
-            animate="show"
-            exit={{ opacity: 0, transition: { duration: 0.1 } }}
-          >
-            {activeTab === "dashboard" ? (
-              <DashboardPanel onSelectMeeting={setSelected} />
-            ) : activeTab === "analytics" ? (
-              <AnalyticsPanel />
-            ) : (
-              <ProfilePanel clinicId={clinicId} />
-            )}
+          <motion.div key={activeTab} variants={containerV} initial="hidden" animate="show" exit={{ opacity: 0, transition: { duration: 0.1 } }}>
+            {activeTab === "dashboard" ? <DashboardPanel onSelectMeeting={setSelected} /> : activeTab === "analytics" ? <AnalyticsPanel /> : <ProfilePanel clinicId={clinicId} />}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      {/* ── Bottom Nav — 3 items (Dashboard · Analytics · Profile) ── */}
       <motion.nav
-        aria-label="Main navigation"
-        role="tablist"
         className="fixed bottom-5 md:bottom-8 left-1/2 -translate-x-1/2 z-40 flex items-center p-1.5 gap-1"
         style={{
           background: isDark ? "rgba(22,11,36,0.88)" : "rgba(255,255,255,0.88)",
           backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
           border: "1px solid var(--border-medium)",
           borderRadius: "9999px",
           boxShadow: "var(--shadow-lg)",
         }}
-        initial={{ y: 48, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.45, type: "spring", damping: 22 }}
+        initial={{ y: 48, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.45, type: "spring", damping: 22 }}
       >
         {TABS.map(({ id, icon: Icon, label }) => {
           const isActive = activeTab === id;
           return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              aria-controls={`${tabPanelId}-panel`}
-              onClick={() => setActiveTab(id)}
-              aria-label={label}
-              className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-200"
-              style={
-                isActive
-                  ? { background: "var(--teal)", color: "#fff", boxShadow: "0 2px 8px rgba(72,196,198,0.35)" }
-                  : { color: "var(--text-muted)", background: "transparent" }
-              }
-            >
-              <Icon size={15} aria-hidden="true" />
+            <button key={id} onClick={() => handleTabChange(id)} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-200" style={isActive ? { background: "var(--teal)", color: "#fff", boxShadow: "0 2px 8px rgba(72,196,198,0.35)" } : { color: "var(--text-muted)", background: "transparent" }}>
+              <Icon size={15} />
               <span className="hidden sm:inline">{label}</span>
             </button>
           );
         })}
       </motion.nav>
 
-      {/* ── Meeting detail modal ───────────────────────────────── */}
-      <MeetingModal
-        isOpen={!!selectedMeeting}
-        onClose={() => setSelected(null)}
-        meeting={selectedMeeting}
-      />
+      <MeetingModal isOpen={!!selectedMeeting} onClose={() => setSelected(null)} meeting={selectedMeeting} />
     </div>
   );
 }
