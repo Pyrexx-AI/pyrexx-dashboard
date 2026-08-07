@@ -3,7 +3,10 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Building2, Clock, CheckCircle2, AlertTriangle, Plus, DollarSign, Activity, Users, Loader2, Search, Bot, Database as DbIcon, X } from "lucide-react";
+import { 
+  Clock, CheckCircle2, AlertTriangle, Plus, DollarSign, Activity, 
+  Users, Loader2, Search, Bot, Database as DbIcon, X, Eye, FileText 
+} from "lucide-react";
 import { createManualClient } from "@/app/admin/actions";
 import type { Database, ClinicStatus, PlanTier, CrmProvider } from "@/types/database";
 
@@ -25,7 +28,6 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
     name: "", contact_email: "", phone_number: "", receptionist_name: "Aria", plan_tier: "overflow" as PlanTier, crm_provider: "none" as CrmProvider
   });
 
-  // Filter clients based on search query
   const filteredClinics = useMemo(() => {
     if (!searchQuery.trim()) return clinics;
     const lowerQ = searchQuery.toLowerCase();
@@ -54,7 +56,7 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
 
   return (
     <div className="flex flex-col gap-8 w-full">
-      {/* Metrics Row */}
+      {/* Metrics Header */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { title: "Monthly Recurring", val: metrics.mrr, icon: DollarSign, color: "var(--teal)" },
@@ -72,15 +74,18 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
         ))}
       </div>
 
-      {/* Toolbar: Title + Search + Add Button */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4">
+      {/* Toolbar & Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
         <div>
           <h2 className="text-xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Client Directory</h2>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>Manage deployments and integrations.</p>
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>Manage deployments, inspect client dashboards, and configure legal agreements.</p>
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:w-64">
+          <Link href="/admin/legal" className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors" style={{ background: "var(--purple-surface)", color: "var(--purple-text)" }}>
+            <FileText size={16} /> Legal Docs CMS
+          </Link>
+          <div className="relative flex-1 md:w-56">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} />
             <input 
               type="text" 
@@ -91,13 +96,13 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
               style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
             />
           </div>
-          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors flex-shrink-0" style={{ background: "var(--teal)", color: "#fff" }}>
+          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors flex-shrink-0" style={{ background: "var(--teal)", color: "#fff" }}>
             <Plus size={16} /> <span className="hidden sm:inline">Add Client</span>
           </button>
         </div>
       </div>
 
-      {/* Needs Setup Queue */}
+      {/* Action Required Queue */}
       {needsAttention.length > 0 && (
         <section>
           <h3 className="text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: "var(--warning-text)" }}>
@@ -109,7 +114,7 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
         </section>
       )}
 
-      {/* All Clients List */}
+      {/* Active Clients List */}
       <section>
         <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>All Clients</h3>
         <div className="flex flex-col gap-2">
@@ -125,7 +130,7 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
         </div>
       </section>
 
-      {/* Sleek Manual Add Modal */}
+      {/* Manual Client Setup Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -198,23 +203,23 @@ function ClinicRow({ clinic, highlighted = false }: { clinic: Clinic; highlighte
   const hasCrm = clinic.crm_provider !== "none";
 
   return (
-    <Link href={`/admin/clients/${clinic.id}`} className="card card-hover flex flex-col sm:flex-row sm:items-center gap-4 p-4 transition-all" style={highlighted ? { borderColor: "var(--warning-text)", borderWidth: "1.5px" } : {}}>
+    <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 transition-all" style={highlighted ? { borderColor: "var(--warning-text)", borderWidth: "1.5px" } : {}}>
       
-      <div className="flex items-center gap-3 flex-1 min-w-0">
+      <Link href={`/admin/clients/${clinic.id}`} className="flex items-center gap-3 flex-1 min-w-0 group">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0" style={{ background: "var(--teal-surface)", color: "var(--teal-text)" }}>
           {clinic.name.slice(0, 2).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{clinic.name}</p>
+            <p className="text-sm font-bold truncate group-hover:text-teal-500 transition-colors" style={{ color: "var(--text-primary)" }}>{clinic.name}</p>
             <span className="badge text-[10px]" style={{ background: status.bg, color: status.color }}><StatusIcon size={9} /> {status.label}</span>
           </div>
           <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>{clinic.contact_email} · {clinic.phone_number}</p>
         </div>
-      </div>
+      </Link>
 
-      <div className="flex items-center gap-3 pl-12 sm:pl-0">
-        <div className="flex gap-1.5">
+      <div className="flex items-center gap-3 pl-12 sm:pl-0 flex-shrink-0">
+        <div className="flex gap-1.5 hidden md:flex">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold" style={{ background: hasAgent ? "var(--success-surface)" : "var(--bg-sunken)", color: hasAgent ? "var(--success-text)" : "var(--text-muted)" }}>
             <Bot size={12} /> {hasAgent ? "Agent Live" : "No Agent"}
           </div>
@@ -222,7 +227,17 @@ function ClinicRow({ clinic, highlighted = false }: { clinic: Clinic; highlighte
             <DbIcon size={12} /> {hasCrm ? "CRM Linked" : "No CRM"}
           </div>
         </div>
+
+        {/* ADMIN INSPECT DASHBOARD BUTTON */}
+        <Link 
+          href={`/?previewClinicId=${clinic.id}`} 
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+          style={{ background: "var(--info-surface)", color: "var(--info-text)" }}
+          title="Inspect this clinic's live client dashboard"
+        >
+          <Eye size={13} /> Inspect Dashboard
+        </Link>
       </div>
-    </Link>
+    </div>
   );
 }
