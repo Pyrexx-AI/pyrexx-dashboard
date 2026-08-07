@@ -33,17 +33,20 @@ export default function LoginForm() {
       return;
     }
 
-    // Fetch user profile to enforce role routing
+    // Check user metadata and profile role
+    const isMetadataAdmin = data.user.user_metadata?.role === "admin";
+    
     const { data: profile } = await supabase
       .from("profiles")
-      .select("*")
+      .select("role")
       .eq("id", data.user.id)
       .single();
 
+    const isAdmin = isMetadataAdmin || profile?.role === "admin";
     const redirect = searchParams.get("redirect");
 
-    // Admin users ALWAYS load at /admin upon login
-    if (profile?.role === "admin") {
+    // ADMINS ARE ALWAYS REDIRECTED TO /admin DIRECTLY
+    if (isAdmin) {
       router.push("/admin");
     } else {
       router.push(redirect || "/");
@@ -56,10 +59,9 @@ export default function LoginForm() {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
         className="card w-full max-w-sm p-6 md:p-8 flex flex-col gap-6"
       >
-        {/* Logo Branding */}
         <div className="flex flex-col items-center gap-3">
           <LogoMark size={48} />
           <div className="text-center">
@@ -132,7 +134,7 @@ export default function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90"
             style={{ background: "var(--teal)", color: "#fff" }}
           >
             {loading && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
