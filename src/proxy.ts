@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import { createAdminClient } from "@/lib/supabase/server";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/onboarding"];
 
@@ -11,23 +12,35 @@ export async function proxy(request: NextRequest) {
   const { response, user, supabase } = await updateSession(request);
   const { pathname, searchParams } = request.nextUrl;
 
-  // Webhooks bypass session auth (authenticated via HMAC signatures)
+  // Webhooks authenticate via HMAC signatures — skip session checks
   if (pathname.startsWith("/api/webhooks/")) {
     return response;
   }
 
   if (user) {
-    // Fetch user profile role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    let isAdmin = user.user_metadata?.role === "admin";
 
-    const isAdmin = profile?.role === "admin";
+    // Double-check profiles table using Service Role client to bypass RLS context drops
+    if (!isAdmin) {
+      try {
+        const adminSupabase = createAdminClient();
+        const { data: profile } = await adminSupabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+
+        if (profile?.role === "admin") {
+          isAdmin = true;
+        }
+      } catch (e) {
+        // Fallback to false if query fails
+      }
+    }
+
     const isInspectingClinic = searchParams.has("previewClinicId");
 
-    // Redirect logged-in users away from public auth pages
+    // Redirect authenticated users away from login/signup pages
     if (isPublicPath(pathname)) {
       const url = request.nextUrl.clone();
       url.pathname = isAdmin ? "/admin" : "/";
@@ -35,15 +48,15 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // ENFORCE ADMIN ROUTING RULE:
-    // Admin accessing root `/` WITHOUT a preview parameter is redirected to `/admin`
+    // STRICT ADMIN ROUTING RULE:
+    // Admin on root `/` without an active preview parameter goes straight to `/admin`
     if (pathname === "/" && isAdmin && !isInspectingClinic) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin";
       return NextResponse.redirect(url);
     }
 
-    // Gate `/admin` routes against non-admin clinic users
+    // Protect `/admin` routes against non-admin clinic users
     if (pathname.startsWith("/admin") && !isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
@@ -52,7 +65,7 @@ export async function proxy(request: NextRequest) {
 
     return response;
   } else {
-    // Unauthenticated user routing
+    // Unauthenticated user handling
     if (isPublicPath(pathname)) {
       return response;
     }

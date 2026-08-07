@@ -37,15 +37,11 @@
   --shadow-md:    0 4px 16px rgba(15,23,42,0.05), 0 1px 4px rgba(15,23,42,0.03);
   --shadow-lg:    0 8px 32px rgba(15,23,42,0.06), 0 2px 8px rgba(15,23,42,0.03);
   --shadow-xl:    0 16px 48px rgba(15,23,42,0.08), 0 4px 16px rgba(15,23,42,0.04);
-  --shadow-float: 0 20px 60px rgba(15,23,42,0.10), 0 6px 20px rgba(15,23,42,0.04);
 
   --toggle-bg:        #E2E8F0;
   --toggle-active-bg: #FFFFFF;
   --toggle-active-fg: #D97706;  
   --toggle-inactive-fg: #64748B;
-
-  --logo-outline: #1E293B;
-  --logo-gap:     #FFFFFF;
 
   color-scheme: light;
 }
@@ -84,15 +80,11 @@ html.dark {
   --shadow-md:    0 4px 18px rgba(0,0,0,0.32), 0 1px 4px rgba(0,0,0,0.24);
   --shadow-lg:    0 8px 36px rgba(0,0,0,0.38), 0 2px 10px rgba(0,0,0,0.26);
   --shadow-xl:    0 18px 52px rgba(0,0,0,0.42), 0 4px 18px rgba(0,0,0,0.30);
-  --shadow-float: 0 22px 64px rgba(0,0,0,0.50), 0 6px 22px rgba(137,82,165,0.20);
 
   --toggle-bg:        #150F20;
   --toggle-active-bg: #302849;
   --toggle-active-fg: #A78CF0;  
   --toggle-inactive-fg: #5E5478;
-
-  --logo-outline: #564A78;
-  --logo-gap:     #F4F1FA;
 
   color-scheme: dark;
 }
@@ -101,13 +93,6 @@ html.dark {
   --color-background: var(--bg-base);
   --color-foreground: var(--text-primary);
   --color-card:       var(--bg-card);
-
-  --color-pyrexx-blue:    #48C4C6;
-  --color-pyrexx-purple:  #8952A5;
-  --color-pyrexx-darkBg:  #1A1626;
-  --color-pyrexx-darkCard:#251F38;
-  --color-pyrexx-surface: #302849;
-
   --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
 }
 
@@ -116,9 +101,8 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Smooth, non-jarring color transitions across dark/light mode toggles */
-  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-              color 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dashboard-bg {
@@ -143,13 +127,15 @@ html.dark .dashboard-bg {
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
   border-radius: 1.25rem;
-  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+  transition: background-color 0.3s ease,
+              border-color 0.3s ease,
               box-shadow 0.2s ease, transform 0.2s ease;
 }
-.card-hover:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+
+/* GPU-Accelerated Desktop Card Hover State */
+.card:hover {
+  box-shadow: var(--shadow-md), 0 0 20px rgba(72,196,198,0.08);
+  transform: translate3d(0, -2px, 0);
 }
 
 .theme-toggle-pill {
@@ -158,19 +144,18 @@ html.dark .dashboard-bg {
   padding: 3px;
   border-radius: 9999px;
   background: var(--toggle-bg);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06), inset 0 1px 2px rgba(0,0,0,0.04);
-  transition: background-color 0.35s ease;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
 }
 
 .theme-toggle-btn {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 14px;
+  padding: 6px 12px;
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
-  transition: all 0.22s cubic-bezier(0.34, 1.2, 0.64, 1);
+  transition: all 0.2s cubic-bezier(0.34, 1.2, 0.64, 1);
   cursor: pointer;
   border: none;
   background: transparent;
@@ -179,7 +164,7 @@ html.dark .dashboard-bg {
 .theme-toggle-btn.active {
   background: var(--toggle-active-bg);
   color: var(--toggle-active-fg);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
 .badge {
@@ -218,6 +203,3 @@ html.dark .dashboard-bg {
     animation-iteration-count: 1 !important;
   }
 }
-
-button, [role="button"] { touch-action: manipulation; }
-html { scroll-behavior: smooth; }
