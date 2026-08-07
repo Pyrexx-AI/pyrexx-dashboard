@@ -7,6 +7,7 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   LayoutDashboard, BarChart3, ChevronRight, CalendarCheck, Sparkles,
   CheckCircle2, Clock, AlertCircle, CalendarClock, TrendingUp, Zap, UserCircle2,
+  Eye, ArrowLeft, ShieldAlert
 } from "lucide-react";
 import DonutChart from "./DonutChart";
 import MeetingModal, { Meeting } from "./MeetingModal";
@@ -26,21 +27,18 @@ const itemV: Variants = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
 };
 
-/* ─── Mock Initial Data ─────────────────────────────────────────── */
+/* ─── Mock Initial Data Fallbacks ────────────────────────────────── */
 const initialRecentCalls: Meeting[] = [
   { id: 1, name: "Sarah Jenkins",  type: "Botox Consult",    time: "Today, 10:00 AM",    status: "Completed", transcriptPreview: "Client asked about recovery time. AI explained 24-48h, booked follow-up." },
   { id: 2, name: "Mike Ross",      type: "Back Massage",     time: "Yesterday, 2:30 PM", status: "Completed", transcriptPreview: "60-min deep tissue confirmed. Intake forms sent via SMS." },
-  { id: 3, name: "Emily Clark",    type: "Pricing Inquiry",  time: "Yesterday, 4:15 PM", status: "Completed", transcriptPreview: "Provided tier pricing. Client will call back to schedule." },
 ];
 
 const initialRecentlyBooked: Meeting[] = [
   { id: 6,  name: "Rachel Green",   type: "Microneedling",  time: "Today, 3:30 PM",    status: "Confirmed", bookedAt: "just now",   transcriptPreview: "New client. AI collected intake info and sent confirmation SMS." },
-  { id: 7,  name: "Tom Harrington", type: "LED Therapy",    time: "Tomorrow, 2:00 PM", status: "Confirmed", bookedAt: "12 min ago", transcriptPreview: "Returning client. AI offered preferred time slot automatically." },
 ];
 
 const initialUpcomingBookings: Meeting[] = [
   { id: 11, name: "Jessica Alba",    type: "Botox Follow-up", time: "Today, 3:00 PM",    status: "Scheduled", transcriptPreview: "Prefers Dr. Smith. VIP note added to CRM." },
-  { id: 12, name: "David Chen",      type: "Consultation",    time: "Tomorrow, 9:00 AM", status: "Scheduled", transcriptPreview: "First visit. Waiver must be completed before arrival." },
 ];
 
 function statusStyle(status: string) {
@@ -125,9 +123,12 @@ export default function DashboardHome() {
   const { resolvedTheme } = useTheme();
   
   const activeTab = searchParams.get("tab") || "dashboard";
+  const previewClinicId = searchParams.get("previewClinicId");
   
   const [selectedMeeting, setSelected] = useState<Meeting | null>(null);
-  const [clinicId, setClinicId] = useState<string | undefined>();
+  const [clinicId, setClinicId] = useState<string | undefined>(previewClinicId || undefined);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [inspectClinicName, setInspectClinicName] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   
   const [recentCalls, setRecentCalls] = useState<Meeting[]>(initialRecentCalls);
@@ -144,15 +145,27 @@ export default function DashboardHome() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-        if (profile?.clinic_id) {
-          setClinicId(profile.clinic_id);
+        const userIsAdmin = profile?.role === "admin";
+        setIsAdmin(userIsAdmin);
 
-          // Supabase Realtime Subscription on call_records
+        // Determine active target clinic ID: query param override (Admin mode) OR user's clinic ID
+        const targetClinicId = (userIsAdmin && previewClinicId) ? previewClinicId : profile?.clinic_id;
+
+        if (targetClinicId) {
+          setClinicId(targetClinicId);
+
+          // Fetch clinic name if inspecting as Admin
+          if (userIsAdmin && previewClinicId) {
+            const { data: c } = await supabase.from("clinics").select("name").eq("id", targetClinicId).single();
+            if (c) setInspectClinicName(c.name);
+          }
+
+          // Realtime Supabase Subscription on call_records table
           const channel = supabase
-            .channel(`public:call_records:${profile.clinic_id}`)
+            .channel(`public:call_records:${targetClinicId}`)
             .on(
               "postgres_changes",
-              { event: "*", schema: "public", table: "call_records", filter: `clinic_id=eq.${profile.clinic_id}` },
+              { event: "*", schema: "public", table: "call_records", filter: `clinic_id=eq.${targetClinicId}` },
               (payload) => {
                 const row = payload.new as any;
                 if (!row) return;
@@ -182,16 +195,34 @@ export default function DashboardHome() {
       }
     }
     fetchUserContext();
-  }, []);
+  }, [previewClinicId]);
 
   const handleTabChange = (tabId: string) => {
-    router.replace(`${pathname}?tab=${tabId}`, { scroll: false });
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tabId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <div className="min-h-screen font-sans dashboard-bg">
+      {/* Top Banner when Admin is Inspecting a Client Dashboard */}
+      {isAdmin && previewClinicId && (
+        <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md z-40 relative">
+          <div className="flex items-center gap-2">
+            <Eye size={16} />
+            <span>Admin Inspection Mode: Viewing live dashboard for <strong>{inspectClinicName || previewClinicId}</strong></span>
+          </div>
+          <button 
+            onClick={() => router.push("/admin")}
+            className="flex items-center gap-1 bg-slate-950 text-white px-3 py-1 rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            <ArrowLeft size={12} /> Return to Admin Command Center
+          </button>
+        </div>
+      )}
+
       <motion.header
         className="sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 flex items-center gap-3"
         style={{

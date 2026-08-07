@@ -33,8 +33,7 @@ export default function LoginForm() {
       return;
     }
 
-    // Route based on role: admins → /admin, everyone else → / (or
-    // the page they were trying to reach before being redirected here).
+    // Fetch user profile to enforce role routing
     const { data: profile } = await supabase
       .from("profiles")
       .select("*")
@@ -42,6 +41,8 @@ export default function LoginForm() {
       .single();
 
     const redirect = searchParams.get("redirect");
+
+    // Admin users ALWAYS load at /admin upon login
     if (profile?.role === "admin") {
       router.push("/admin");
     } else {
@@ -58,7 +59,7 @@ export default function LoginForm() {
         transition={{ duration: 0.4, ease: "easeOut" }}
         className="card w-full max-w-sm p-6 md:p-8 flex flex-col gap-6"
       >
-        {/* Logo */}
+        {/* Logo Branding */}
         <div className="flex flex-col items-center gap-3">
           <LogoMark size={48} />
           <div className="text-center">
@@ -72,7 +73,6 @@ export default function LoginForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* Email */}
           <div>
             <label htmlFor="email" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
               Email
@@ -93,7 +93,6 @@ export default function LoginForm() {
             </div>
           </div>
 
-          {/* Password */}
           <div>
             <label htmlFor="password" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
               Password
@@ -116,8 +115,6 @@ export default function LoginForm() {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer transition-colors"
                 style={{ color: "var(--text-muted)" }}
-                onMouseOver={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
-                onMouseOut={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -125,7 +122,6 @@ export default function LoginForm() {
             </div>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs" style={{ background: "var(--error-surface)", color: "var(--error-text)" }} role="alert">
               <AlertCircle size={14} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -133,7 +129,6 @@ export default function LoginForm() {
             </div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
