@@ -18,12 +18,12 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user) {
-    // 1. Check user metadata first (fastest, zero network overhead)
+    // 1. Fast metadata check (zero network overhead)
     let isAdmin = 
       user.user_metadata?.role === "admin" || 
       user.app_metadata?.role === "admin";
 
-    // 2. Fail-safe database check using Service Role client to bypass RLS blocks
+    // 2. Service Role query fallback (bypasses RLS recursion or context drops)
     if (!isAdmin) {
       try {
         const adminSupabase = createAdminClient();
@@ -37,13 +37,13 @@ export async function proxy(request: NextRequest) {
           isAdmin = true;
         }
       } catch (e) {
-        // Retain current isAdmin state if database check fails
+        // Fallback to current isAdmin status if database check fails
       }
     }
 
     const isInspectingClinic = searchParams.has("previewClinicId");
 
-    // Redirect authenticated users away from login/signup pages
+    // Redirect authenticated users away from public auth pages
     if (isPublicPath(pathname)) {
       const url = request.nextUrl.clone();
       url.pathname = isAdmin ? "/admin" : "/";
@@ -51,15 +51,15 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // STRICT ADMIN ROUTING RULE:
-    // Admin on root `/` without a preview parameter goes straight to `/admin`
+    // STRICT ADMIN ROUTING:
+    // Admin accessing root `/` without an active preview parameter is routed to `/admin`
     if (pathname === "/" && isAdmin && !isInspectingClinic) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin";
       return NextResponse.redirect(url);
     }
 
-    // Protect `/admin` routes against non-admin clinic users
+    // Gate `/admin` routes against non-admin clinic users
     if (pathname.startsWith("/admin") && !isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
@@ -68,7 +68,7 @@ export async function proxy(request: NextRequest) {
 
     return response;
   } else {
-    // Unauthenticated user handling
+    // Unauthenticated user routing
     if (isPublicPath(pathname)) {
       return response;
     }
@@ -79,3 +79,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 }
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
