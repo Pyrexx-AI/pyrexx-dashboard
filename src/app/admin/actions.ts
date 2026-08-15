@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { ClinicStatus, PlanTier, CrmProvider } from "@/types/database";
 
@@ -9,29 +9,44 @@ async function requireAdmin() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  if (profile?.role !== "admin") throw new Error("Not authorized");
-  
-  // Return a fresh Supabase instance using the Service Role to bypass RLS for admin tasks
-  const { createAdminClient } = await import("@/lib/supabase/server");
-  return createAdminClient();
+  let isAdmin = user.user_metadata?.role === "admin" || user.app_metadata?.role === "admin";
+
+  const adminClient = createAdminClient();
+
+  if (!isAdmin) {
+    const { data: profile } = await adminClient
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (profile?.role === "admin") {
+      isAdmin = true;
+    }
+  }
+
+  if (!isAdmin) throw new Error("Not authorized: Admin privilege required.");
+
+  return adminClient;
 }
 
-/** CREATE MANUAL CLIENT BYPASSING STRIPE/DODO */
 export async function createManualClient(data: {
-  name: string; contact_email: string; phone_number: string; receptionist_name: string;
-  plan_tier: PlanTier; crm_provider: CrmProvider;
+  name: string;
+  contact_email: string;
+  phone_number: string;
+  receptionist_name: string;
+  plan_tier: PlanTier;
+  crm_provider: CrmProvider;
 }) {
   const supabase = await requireAdmin();
 
-  // Create the clinic, assuming subscription is active immediately
   const { data: clinic, error } = await supabase
     .from("clinics")
     .insert({
       ...data,
       plan_price_cents: data.plan_tier === "full_time" ? 150000 : 100000,
-      status: "pending_setup", // Ready for agent provision
-      subscription_status: "active" 
+      status: "pending_setup",
+      subscription_status: "active",
     })
     .select("*")
     .single();
@@ -41,7 +56,6 @@ export async function createManualClient(data: {
   return { success: true, clinicId: clinic.id };
 }
 
-/** DISCONNECT/WIPE AGENT DETAILS */
 export async function disconnectAgent(clinicId: string) {
   const supabase = await requireAdmin();
   const { error } = await supabase
@@ -49,7 +63,7 @@ export async function disconnectAgent(clinicId: string) {
     .update({
       agent_id: null,
       agent_phone_number: null,
-      agent_provisioning_status: "pending"
+      agent_provisioning_status: "pending",
     })
     .eq("id", clinicId);
 
@@ -74,8 +88,9 @@ export async function updateCrmCredentials(clinicId: string, credentials: { apiK
   const { error } = await supabase
     .from("integration_credentials")
     .upsert({
-        clinic_id: clinicId, provider: "crm",
-        credentials: { api_key: credentials.apiKey.trim(), account_identifier: credentials.accountIdentifier.trim(), notes: credentials.notes.trim() },
+      clinic_id: clinicId,
+      provider: "crm",
+      credentials: { api_key: credentials.apiKey.trim(), account_identifier: credentials.accountIdentifier.trim(), notes: credentials.notes.trim() },
     }, { onConflict: "clinic_id,provider" });
   if (error) return { error: error.message };
   revalidatePath(`/admin/clients/${clinicId}`);

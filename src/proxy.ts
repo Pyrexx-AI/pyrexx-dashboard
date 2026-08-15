@@ -9,7 +9,7 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export async function proxy(request: NextRequest) {
-  const { response, user, supabase } = await updateSession(request);
+  const { response, user } = await updateSession(request);
   const { pathname, searchParams } = request.nextUrl;
 
   // Webhooks authenticate via HMAC signatures — skip session checks
@@ -18,9 +18,12 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user) {
-    let isAdmin = user.user_metadata?.role === "admin";
+    // 1. Check user metadata first (fastest, zero network overhead)
+    let isAdmin = 
+      user.user_metadata?.role === "admin" || 
+      user.app_metadata?.role === "admin";
 
-    // Double-check profiles table using Service Role client to bypass RLS context drops
+    // 2. Fail-safe database check using Service Role client to bypass RLS blocks
     if (!isAdmin) {
       try {
         const adminSupabase = createAdminClient();
@@ -34,7 +37,7 @@ export async function proxy(request: NextRequest) {
           isAdmin = true;
         }
       } catch (e) {
-        // Fallback to false if query fails
+        // Retain current isAdmin state if database check fails
       }
     }
 
@@ -49,7 +52,7 @@ export async function proxy(request: NextRequest) {
     }
 
     // STRICT ADMIN ROUTING RULE:
-    // Admin on root `/` without an active preview parameter goes straight to `/admin`
+    // Admin on root `/` without a preview parameter goes straight to `/admin`
     if (pathname === "/" && isAdmin && !isInspectingClinic) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin";
@@ -76,9 +79,3 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 }
-
-export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
-};

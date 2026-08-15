@@ -1,12 +1,12 @@
-// src/components/ProfilePanel.tsx
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
 import { motion, type Variants } from "framer-motion";
+import Link from "next/link";
 import {
   Building2, Bot, Users, CreditCard, Bell,
   Calendar, MapPin, Phone, Globe, Clock,
-  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2,
+  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2, Shield
 } from "lucide-react";
 import Switch from "./ui/Switch";
 import { createClient } from "@/lib/supabase/client";
@@ -16,17 +16,15 @@ import type { Database as DB } from "@/types/database";
 type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
 type Profile = DB["public"]["Tables"]["profiles"]["Row"];
 
-/* ─── Variants ──────────────────────────────────────────────────── */
 const containerV: Variants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.06, ease: "easeOut" } },
+  show: { opacity: 1, transition: { staggerChildren: 0.05, ease: "easeOut" } },
 };
 const itemV: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } },
 };
 
-/* ─── Section wrapper ───────────────────────────────────────────── */
 function Section({ icon: Icon, iconBg, iconColor, title, action, children }: {
   icon: React.ElementType; iconBg: string; iconColor: string; title: string;
   action?: React.ReactNode; children: React.ReactNode;
@@ -47,7 +45,6 @@ function Section({ icon: Icon, iconBg, iconColor, title, action, children }: {
   );
 }
 
-/* ─── Small "edit" button used in section headers ───────────────── */
 function EditButton({ label }: { label: string }) {
   return (
     <button
@@ -61,7 +58,6 @@ function EditButton({ label }: { label: string }) {
   );
 }
 
-/* ─── Main Panel ────────────────────────────────────────────────── */
 export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
   const [prefs, setPrefs] = useState({
     dailyDigest: true,
@@ -73,7 +69,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
   const [isPending, startTransition] = useTransition();
   const [billingError, setBillingError] = useState<string | null>(null);
 
-  // Database State
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [team, setTeam] = useState<Profile[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -105,12 +100,9 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
   const togglePref = (key: keyof typeof prefs) =>
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
-  /**
-   * Opens Dodo's hosted checkout for this clinic's active plan.
-   */
   function handleManageBilling() {
     if (!clinicId) {
-      setBillingError("Billing isn't available yet — clinic context missing.");
+      setBillingError("Billing is not available — missing clinic context.");
       return;
     }
     setBillingError(null);
@@ -130,41 +122,42 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     });
   }
 
-  // Show a loading skeleton/spinner while fetching real data
   if (loadingData) {
     return (
       <div className="w-full h-64 flex flex-col items-center justify-center gap-3">
         <Loader2 size={28} className="animate-spin" style={{ color: "var(--teal)" }} />
-        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Loading profile data...</p>
+        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Loading clinic profile data...</p>
       </div>
     );
   }
 
-  // Admins (and any account with no clinic_id) have nothing to show
-  // here — this panel is clinic-scoped. Admins manage clients from /admin.
+  // Admin Account view when accessing profile without a selected clinic
   if (!clinicId) {
     return (
-      <div className="w-full flex flex-col items-center justify-center gap-3 py-20 text-center">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "var(--info-surface)" }}>
-          <Building2 size={20} style={{ color: "var(--info-text)" }} aria-hidden="true" />
+      <div className="w-full flex flex-col items-center justify-center gap-4 py-16 text-center card p-8">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
+          <Shield size={24} style={{ color: "var(--teal)" }} aria-hidden="true" />
         </div>
         <div>
-          <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>No clinic profile to show</p>
-          <p className="text-xs mt-1 max-w-xs" style={{ color: "var(--text-muted)" }}>
-            Admin accounts aren't tied to a single clinic. Manage client clinics from the admin dashboard.
+          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Admin Account Mode</h3>
+          <p className="text-xs mt-1 max-w-sm" style={{ color: "var(--text-muted)" }}>
+            Your account has executive administrator privileges. Manage and configure all client clinics from the Admin Command Center.
           </p>
         </div>
-        <a href="/admin" className="text-xs font-semibold mt-1" style={{ color: "var(--teal-text)" }}>
-          Go to Admin Dashboard →
-        </a>
+        <Link
+          href="/admin"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-md"
+          style={{ background: "var(--teal)", color: "#fff" }}
+        >
+          Open Admin Command Center &rarr;
+        </Link>
       </div>
     );
   }
 
-  /* ─── Dynamic Data Mapping ────────────────────────────────────── */
   const clinicInfo = {
     name: clinic?.name || "Unknown Clinic",
-    address: "Address not set", 
+    address: "Location on File", 
     phone: clinic?.phone_number || "—",
     website: clinic?.website || "—",
     timezone: "Eastern Time (ET)", 
@@ -207,7 +200,7 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     price: clinic?.plan_price_cents 
       ? `$${(clinic.plan_price_cents / 100).toLocaleString()}/month` 
       : (currentPlanDefinition?.priceLabel || "TBD"),
-    renewal: "TBD", // Handled dynamically once billing is active
+    renewal: "Active Monthly",
     minutesUsed: 0,
     minutesIncluded: 2500,
   };
@@ -238,7 +231,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
 
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="flex flex-col gap-4">
-      {/* Header */}
       <motion.div variants={itemV}>
         <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Profile &amp; Settings</h2>
         <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -247,10 +239,8 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* ── Main column ─────────────────────────────────────── */}
+        {/* Main Column */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-
-          {/* Clinic info */}
           <Section icon={Building2} iconBg="var(--teal-surface)" iconColor="var(--teal)"
             title="Clinic Profile" action={<EditButton label="Edit clinic profile" />}>
             <div className="flex items-start gap-4">
@@ -285,7 +275,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             </div>
           </Section>
 
-          {/* AI Receptionist settings */}
           <Section icon={Bot} iconBg="var(--purple-surface)" iconColor="var(--purple)"
             title="AI Receptionist" action={<EditButton label="Edit AI receptionist settings" />}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -320,7 +309,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             </div>
           </Section>
 
-          {/* Team members */}
           <Section icon={Users} iconBg="var(--info-surface)" iconColor="var(--info-text)"
             title="Team Members"
             action={
@@ -347,15 +335,13 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
           </Section>
         </div>
 
-        {/* ── Sidebar column ──────────────────────────────────── */}
+        {/* Sidebar Column */}
         <div className="flex flex-col gap-4">
-
-          {/* Plan / billing */}
           <Section icon={CreditCard} iconBg="var(--success-surface)" iconColor="var(--success-text)" title="Subscription">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{plan.name}</p>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{plan.price} · renews {plan.renewal}</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{plan.price} · {plan.renewal}</p>
               </div>
               <span className="badge text-[10px]" style={{ 
                 background: isSubActive ? "var(--success-surface)" : "var(--warning-surface)", 
@@ -379,7 +365,7 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
               </div>
             </div>
             <button type="button" onClick={handleManageBilling} disabled={isPending}
-              className="w-full mt-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
+              className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
               style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
               {isPending && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
               {isPending ? "Opening billing…" : "Manage Billing"}
@@ -389,7 +375,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             )}
           </Section>
 
-          {/* Integrations */}
           <Section icon={Database} iconBg="var(--teal-surface)" iconColor="var(--teal)" title="Integrations">
             <ul className="space-y-3" role="list">
               {integrations.map((i) => {
@@ -422,7 +407,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             </ul>
           </Section>
 
-          {/* Notification preferences */}
           <Section icon={Bell} iconBg="var(--warning-surface)" iconColor="var(--warning-text)" title="Notifications">
             <ul className="space-y-3" role="list">
               <li className="flex items-center justify-between gap-3">
@@ -446,18 +430,10 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
                 </div>
                 <Switch checked={prefs.newBookingPush} onChange={() => togglePref("newBookingPush")} label="New booking push notifications" />
               </li>
-              <li className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>Weekly performance report</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Sent every Monday</p>
-                </div>
-                <Switch checked={prefs.weeklyReport} onChange={() => togglePref("weeklyReport")} label="Weekly performance report" />
-              </li>
             </ul>
           </Section>
 
-          {/* Account actions */}
-          <motion.div variants={itemV} className="flex gap-2">
+          <div className="flex gap-2">
             <button type="button"
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
               style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
@@ -473,7 +449,7 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
               }}>
               <LogOut size={13} aria-hidden="true" /> Sign Out
             </button>
-          </motion.div>
+          </div>
         </div>
       </div>
     </motion.div>
