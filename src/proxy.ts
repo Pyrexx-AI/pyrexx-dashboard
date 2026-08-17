@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
-import { createAdminClient } from "@/lib/supabase/server";
+import { verifyAdminStatus } from "@/lib/auth/admin";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/onboarding"];
 
@@ -18,29 +18,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user) {
-    // 1. Fast metadata check (zero network overhead)
-    let isAdmin = 
-      user.user_metadata?.role === "admin" || 
-      user.app_metadata?.role === "admin";
-
-    // 2. Service Role query fallback (bypasses RLS recursion or context drops)
-    if (!isAdmin) {
-      try {
-        const adminSupabase = createAdminClient();
-        const { data: profile } = await adminSupabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-
-        if (profile?.role === "admin") {
-          isAdmin = true;
-        }
-      } catch (e) {
-        // Fallback to current isAdmin status if database check fails
-      }
-    }
-
+    const isAdmin = await verifyAdminStatus(user);
     const isInspectingClinic = searchParams.has("previewClinicId");
 
     // Redirect authenticated users away from public auth pages
@@ -52,7 +30,7 @@ export async function proxy(request: NextRequest) {
     }
 
     // STRICT ADMIN ROUTING:
-    // Admin accessing root `/` without an active preview parameter is routed to `/admin`
+    // Admin on root `/` without an active preview parameter is routed to `/admin`
     if (pathname === "/" && isAdmin && !isInspectingClinic) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin";

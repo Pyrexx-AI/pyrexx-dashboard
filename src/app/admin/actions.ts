@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { verifyAdminStatus } from "@/lib/auth/admin";
 import { revalidatePath } from "next/cache";
 import type { ClinicStatus, PlanTier, CrmProvider } from "@/types/database";
 
@@ -9,25 +10,10 @@ async function requireAdmin() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  let isAdmin = user.user_metadata?.role === "admin" || user.app_metadata?.role === "admin";
-
-  const adminClient = createAdminClient();
-
-  if (!isAdmin) {
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role === "admin") {
-      isAdmin = true;
-    }
-  }
-
+  const isAdmin = await verifyAdminStatus(user);
   if (!isAdmin) throw new Error("Not authorized: Admin privilege required.");
 
-  return adminClient;
+  return createAdminClient();
 }
 
 export async function createManualClient(data: {
@@ -90,7 +76,7 @@ export async function updateCrmCredentials(clinicId: string, credentials: { apiK
     .upsert({
       clinic_id: clinicId,
       provider: "crm",
-      credentials: { api_key: credentials.apiKey.trim(), account_identifier: credentials.accountIdentifier.trim(), notes: credentials.notes.trim() },
+      credentials: { api_key: credentials.apiKey.trim(), accountIdentifier: credentials.accountIdentifier.trim(), notes: credentials.notes.trim() },
     }, { onConflict: "clinic_id,provider" });
   if (error) return { error: error.message };
   revalidatePath(`/admin/clients/${clinicId}`);

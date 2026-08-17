@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
+import { verifyAdminStatus } from "@/lib/auth/admin";
 import LogoMark from "@/components/LogoMark";
 import AdminSignOutButton from "@/components/admin/AdminSignOutButton";
 import ThemeToggle from "@/components/ui/ThemeToggle";
@@ -16,23 +17,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/login?redirect=/admin");
   }
 
-  // Server-side fail-safe role verification
-  let isAdmin = user.user_metadata?.role === "admin" || user.app_metadata?.role === "admin";
+  const isAdmin = await verifyAdminStatus(user);
 
-  if (!isAdmin) {
-    const adminDb = createAdminClient();
-    const { data: profile } = await adminDb
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role === "admin") {
-      isAdmin = true;
-    }
-  }
-
-  // If user is definitely not an admin, bounce to client dashboard
   if (!isAdmin) {
     redirect("/");
   }
