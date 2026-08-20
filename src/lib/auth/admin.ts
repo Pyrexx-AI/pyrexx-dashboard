@@ -1,59 +1,88 @@
 import { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
 
-// Fallback admin emails / domains that are ALWAYS granted admin authority
-const HARDCODED_ADMIN_EMAILS = [
+/**
+ * Fallback administrative emails and domain that are ALWAYS granted executive privileges.
+ */
+export const HARDCODED_ADMIN_EMAILS = [
   "admin@pyrexxai.com",
   "clifford@pyrexxai.com",
   "hello@pyrexxai.com",
 ];
 
+/**
+ * Fast synchronous check for known admin email addresses or domain patterns.
+ */
+export function isWhitelistedAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.toLowerCase().trim();
+
+  if (HARDCODED_ADMIN_EMAILS.includes(normalized)) return true;
+  if (normalized.endsWith("@pyrexxai.com")) return true;
+
+  const envAdmin = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+  if (envAdmin && envAdmin === normalized) return true;
+
+  const envAdmins = process.env.ADMIN_EMAILS?.toLowerCase().split(",").map((e) => e.trim());
+  if (envAdmins && envAdmins.includes(normalized)) return true;
+
+  return false;
+}
+
+/**
+ * Single source of truth for verifying admin status across Next.js Server Components,
+ * Route Handlers, Server Actions, and Proxy/Middleware.
+ *
+ * Checks:
+ * 1. Hardcoded / domain whitelist / env vars
+ * 2. Secure Auth Token app_metadata (set by Supabase Admin API)
+ * 3. Database public.profiles role column via Service Role (bypassing RLS)
+ */
 export async function verifyAdminStatus(user: User | null): Promise<boolean> {
-  if (!user || !user.email) return false;
+  if (!user) return false;
 
-  const email = user.email.toLowerCase().trim();
+  const email = user.email?.toLowerCase().trim();
 
-  // 1. Check if email is in the admin whitelist or ends with @pyrexxai.com
-  const isEmailAdmin = 
-    HARDCODED_ADMIN_EMAILS.includes(email) || 
-    email.endsWith("@pyrexxai.com") ||
-    process.env.ADMIN_EMAIL?.toLowerCase() === email ||
-    process.env.ADMIN_EMAILS?.toLowerCase().split(",").map(e => e.trim()).includes(email);
+  // 1. Email whitelist check
+  const isEmailAdmin = isWhitelistedAdminEmail(email);
 
-  // 2. Check Auth Metadata
-  const isMetaAdmin = 
-    user.user_metadata?.role === "admin" || 
-    user.app_metadata?.role === "admin";
+  // 2. Token app_metadata / user_metadata check (app_metadata is server-only and tamper-proof)
+  const isTokenAdmin =
+    user.app_metadata?.role === "admin" ||
+    user.user_metadata?.role === "admin";
 
-  if (isEmailAdmin || isMetaAdmin) {
+  if (isEmailAdmin || isTokenAdmin) {
     // AUTO-HEAL: Ensure database public.profiles row reflects role = 'admin'
     try {
       const adminSupabase = createAdminClient();
-      await adminSupabase.from("profiles").upsert({
-        id: user.id,
-        role: "admin",
-        full_name: user.user_metadata?.full_name || "Administrator",
-      }, { onConflict: "id" });
-    } catch (e) {
-      console.warn("Profile auto-healing notice:", e);
+      await adminSupabase.from("profiles").upsert(
+        {
+          id: user.id,
+          role: "admin",
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name || "Administrator",
+        },
+        { onConflict: "id" }
+      );
+    } catch (autoHealErr) {
+      console.warn("[Admin Auth] Profile auto-healing notice (non-fatal):", autoHealErr);
     }
     return true;
   }
 
-  // 3. Database Check using Service Role (Bypasses RLS)
+  // 3. Database Check using Service Role
   try {
     const adminSupabase = createAdminClient();
-    const { data: profile } = await adminSupabase
+    const { data: profile, error } = await adminSupabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
 
-    if (profile?.role === "admin") {
+    if (!error && profile?.role === "admin") {
       return true;
     }
-  } catch (e) {
-    // Database query failed
+  } catch (dbErr) {
+    console.warn("[Admin Auth] Database role lookup failed:", dbErr);
   }
 
   return false;

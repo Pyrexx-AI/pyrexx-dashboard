@@ -26,7 +26,9 @@ export async function proxy(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = isAdmin ? "/admin" : "/";
       url.search = "";
-      return NextResponse.redirect(url);
+      const redirectRes = NextResponse.redirect(url);
+      response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+      return redirectRes;
     }
 
     // STRICT ADMIN ROUTING:
@@ -34,14 +36,18 @@ export async function proxy(request: NextRequest) {
     if (pathname === "/" && isAdmin && !isInspectingClinic) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin";
-      return NextResponse.redirect(url);
+      const redirectRes = NextResponse.redirect(url);
+      response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+      return redirectRes;
     }
 
     // Gate `/admin` routes against non-admin clinic users
     if (pathname.startsWith("/admin") && !isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
-      return NextResponse.redirect(url);
+      const redirectRes = NextResponse.redirect(url);
+      response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+      return redirectRes;
     }
 
     return response;
@@ -51,10 +57,17 @@ export async function proxy(request: NextRequest) {
       return response;
     }
 
+    // For API routes, return structured 401 JSON instead of redirecting to login page
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized: Authentication required." }, { status: 401 });
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
+    const redirectRes = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+    return redirectRes;
   }
 }
 
