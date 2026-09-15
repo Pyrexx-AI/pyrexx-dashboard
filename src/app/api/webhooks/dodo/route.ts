@@ -26,7 +26,7 @@
  * signatures are rejected with 401 and never reach the database or
  * trigger provisioning.
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { verifyDodoWebhook } from "@/lib/dodo/verify-signature";
 import { createAdminClient } from "@/lib/supabase/server";
 import { provisionAiReceptionistAgent } from "@/lib/retell/provision";
@@ -107,28 +107,30 @@ export async function POST(req: NextRequest) {
   // agent creation. Guarded by agent_provisioning_status so renewal
   // events (which also map to "active") don't re-provision a
   // already-working agent.
+  //
+  // FIX: this previously did `await provisionAiReceptionistAgent(clinic)`
+  // directly in the request path — Retell provisioning is 3
+  // sequential API calls that can take several seconds, and the
+  // comment here used to (correctly) flag the timeout risk but keep
+  // the synchronous await anyway "to be safe," which was backwards:
+  // it made Dodo's webhook wait through the exact slow operation it
+  // was trying to protect against, with no actual queue in place.
+  // `after()` (stable since Next.js 15, supported in Route Handlers)
+  // returns the response to Dodo immediately while the platform
+  // keeps this function alive in the background until the callback
+  // finishes — solving the timeout risk with zero new infrastructure.
   if (status === "active" && clinic.agent_provisioning_status === "pending") {
-    // Intentionally NOT awaited inline before responding — Retell
-    // provisioning involves 3 sequential API calls and can take a
-    // few seconds, longer than we want to make Dodo's webhook
-    // delivery wait. We still await it within this handler's
-    // execution (Vercel functions run to completion regardless of
-    // whether the response was already sent in some runtimes, but
-    // to be safe and explicit, we await it before returning here —
-    // serverless functions are not guaranteed to continue running
-    // after returning a response). If provisioning takes too long
-    // and risks the webhook timeout, move this to a queue (e.g.
-    // Vercel Queue, Inngest, or a Supabase Edge Function trigered by
-    // a DB row change) — noted as a scaling follow-up.
-    const result = await provisionAiReceptionistAgent(clinic);
-    if (!result.success) {
-      // Don't fail the webhook over this — billing succeeded, that
-      // part of the flow is done and should be acknowledged. The
-      // clinic is now in agent_provisioning_status = 'failed',
-      // visible to the admin in /admin/clients/[id] with a Retry
-      // button (manual fallback, not the default path).
-      console.error(`Auto-provisioning failed for clinic ${clinicId}:`, result.error);
-    }
+    after(async () => {
+      const result = await provisionAiReceptionistAgent(clinic);
+      if (!result.success) {
+        // Don't fail the webhook over this — billing succeeded, that
+        // part of the flow is done. The clinic is now in
+        // agent_provisioning_status = 'failed', visible to the admin
+        // in /admin/clients/[id] with a Retry button (manual
+        // fallback, not the default path).
+        console.error(`Auto-provisioning failed for clinic ${clinicId}:`, result.error);
+      }
+    });
   }
 
   return NextResponse.json({ received: true });

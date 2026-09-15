@@ -3,7 +3,8 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { verifyAdminStatus } from "@/lib/auth/admin";
 import { revalidatePath } from "next/cache";
-import type { ClinicStatus, PlanTier, CrmProvider } from "@/types/database";
+import { encryptCredentials } from "@/lib/crypto/credentials";
+import type { ClinicStatus, PlanTier, CrmProvider, Database } from "@/types/database";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -108,12 +109,28 @@ export async function updateAgentConnection(clinicId: string, data: { agentId: s
 
 export async function updateCrmCredentials(clinicId: string, credentials: { apiKey: string; accountIdentifier: string; notes: string }) {
   const supabase = await requireAdmin();
+  // FIX: this previously stored { api_key, accountIdentifier, notes }
+  // as plaintext JSON. encryptCredentials() wraps it in an
+  // AES-256-GCM blob — see lib/crypto/credentials.ts for the full
+  // reasoning and the corresponding decryptCredentials() call site
+  // in app/admin/clients/[id]/page.tsx.
+  const encrypted = encryptCredentials({
+    api_key: credentials.apiKey.trim(),
+    accountIdentifier: credentials.accountIdentifier.trim(),
+    notes: credentials.notes.trim(),
+  });
   const { error } = await supabase
     .from("integration_credentials")
     .upsert({
       clinic_id: clinicId,
       provider: "crm",
-      credentials: { api_key: credentials.apiKey.trim(), accountIdentifier: credentials.accountIdentifier.trim(), notes: credentials.notes.trim() },
+      // Cast to Json: Supabase's generated Json type doesn't
+      // structurally accept EncryptedCredentialsBlob's literal types
+      // (_encrypted: true, v: 1) even though every value is plain
+      // JSON at runtime. The shape itself is fully controlled by
+      // lib/crypto/credentials.ts on both the write (here) and read
+      // (decryptCredentials) side.
+      credentials: encrypted as unknown as Database["public"]["Tables"]["integration_credentials"]["Row"]["credentials"],
     }, { onConflict: "clinic_id,provider" });
   if (error) return { error: error.message };
   revalidatePath(`/admin/clients/${clinicId}`);

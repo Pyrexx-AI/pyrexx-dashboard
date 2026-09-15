@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { motion, type Variants } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2, Bot, Users, CreditCard, Bell,
   Calendar, MapPin, Phone, Globe, Clock,
   Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2, Shield,
-  AlertCircle, Mail
+  AlertCircle, Mail, X
 } from "lucide-react";
 import Switch from "./ui/Switch";
 import { createClient } from "@/lib/supabase/client";
@@ -58,11 +58,12 @@ function Section({
   );
 }
 
-function EditButton({ label }: { label: string }) {
+function EditButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       aria-label={label}
+      onClick={onClick}
       className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
       style={{ color: "var(--teal-text)", background: "var(--teal-surface)" }}
     >
@@ -70,6 +71,43 @@ function EditButton({ label }: { label: string }) {
     </button>
   );
 }
+
+/**
+ * Shared modal shell for the three dialogs below (Edit Clinic
+ * Profile, Edit AI Receptionist, Invite Team Member) — these back
+ * buttons that previously rendered with no onClick at all.
+ */
+function SimpleModal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0, y: 15 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 15 }}
+            className="relative card w-full max-w-sm p-0 overflow-hidden"
+          >
+            <div className="px-5 py-4 flex justify-between items-center border-b" style={{ borderColor: "var(--border-subtle)" }}>
+              <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
+              <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" style={{ color: "var(--text-muted)" }}>
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="p-5">{children}</div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+const modalInputClass = "w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-colors";
+const modalInputStyle = { background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" } as const;
 
 export interface ProfilePanelProps {
   clinicId?: string;
@@ -95,9 +133,36 @@ export default function ProfilePanel({
   const [isPending, startTransition] = useTransition();
   const [billingError, setBillingError] = useState<string | null>(null);
 
+  // Edit Clinic Profile modal
+  const [editClinicOpen, setEditClinicOpen] = useState(false);
+  const [editClinicForm, setEditClinicForm] = useState({ name: "", phoneNumber: "", website: "" });
+  const [editClinicSaving, setEditClinicSaving] = useState(false);
+  const [editClinicError, setEditClinicError] = useState<string | null>(null);
+
+  // Edit AI Receptionist (agent name only — the only real column
+  // backing that section; voice/hours/greeting shown there are
+  // derived display text, not stored anywhere in the schema)
+  const [editAiOpen, setEditAiOpen] = useState(false);
+  const [editAiName, setEditAiName] = useState("");
+  const [editAiSaving, setEditAiSaving] = useState(false);
+  const [editAiError, setEditAiError] = useState<string | null>(null);
+
+  // Invite Team Member modal
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteSaving, setInviteSaving] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState(false);
+
+  const [exporting, setExporting] = useState(false);
+
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [team, setTeam] = useState<Profile[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  // Only an owner can invite teammates (enforced server-side in
+  // /api/clinic/invite-team-member too — this just keeps the button
+  // itself honest about who can use it).
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
 
   useEffect(() => {
     if (!clinicId) {
@@ -109,13 +174,17 @@ export default function ProfilePanel({
       setLoadingData(true);
       const supabase = createClient();
 
-      const [clinicRes, teamRes] = await Promise.all([
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const [clinicRes, teamRes, viewerRes] = await Promise.all([
         supabase.from("clinics").select("*").eq("id", id).single(),
         supabase.from("profiles").select("*").eq("clinic_id", id),
+        user ? supabase.from("profiles").select("role").eq("id", user.id).single() : Promise.resolve({ data: null }),
       ]);
 
       if (clinicRes.data) setClinic(clinicRes.data);
       if (teamRes.data) setTeam(teamRes.data);
+      if (viewerRes.data) setViewerRole(viewerRes.data.role);
 
       setLoadingData(false);
     }
@@ -153,6 +222,124 @@ export default function ProfilePanel({
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
+  }
+
+  function openEditClinic() {
+    setEditClinicForm({
+      name: clinic?.name || "",
+      phoneNumber: clinic?.phone_number || "",
+      website: clinic?.website || "",
+    });
+    setEditClinicError(null);
+    setEditClinicOpen(true);
+  }
+
+  async function handleSaveClinicProfile(e: React.FormEvent) {
+    e.preventDefault();
+    if (!clinicId) return;
+    setEditClinicSaving(true);
+    setEditClinicError(null);
+    try {
+      const res = await fetch("/api/clinic/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clinicId,
+          name: editClinicForm.name,
+          phoneNumber: editClinicForm.phoneNumber,
+          website: editClinicForm.website,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Could not save changes");
+      setClinic(json.clinic);
+      setEditClinicOpen(false);
+    } catch (err) {
+      setEditClinicError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setEditClinicSaving(false);
+    }
+  }
+
+  function openEditAi() {
+    setEditAiName(clinic?.receptionist_name || "");
+    setEditAiError(null);
+    setEditAiOpen(true);
+  }
+
+  async function handleSaveAiName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!clinicId) return;
+    setEditAiSaving(true);
+    setEditAiError(null);
+    try {
+      const res = await fetch("/api/clinic/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clinicId, receptionistName: editAiName }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Could not save changes");
+      setClinic(json.clinic);
+      setEditAiOpen(false);
+    } catch (err) {
+      setEditAiError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setEditAiSaving(false);
+    }
+  }
+
+  function openInvite() {
+    setInviteEmail("");
+    setInviteError(null);
+    setInviteSuccess(false);
+    setInviteOpen(true);
+  }
+
+  async function handleSendInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!clinicId) return;
+    setInviteSaving(true);
+    setInviteError(null);
+    try {
+      const res = await fetch("/api/clinic/invite-team-member", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clinicId, email: inviteEmail }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Could not send invite");
+      setInviteSuccess(true);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setInviteSaving(false);
+    }
+  }
+
+  async function handleExportData() {
+    if (!clinicId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/clinic/export-data?clinicId=${encodeURIComponent(clinicId)}`);
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Could not export data");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `call-records-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not export data");
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (loadingData) {
@@ -299,6 +486,12 @@ export default function ProfilePanel({
       desc: "Syncs bookings in real time",
       status: "not_connected",
       icon: Calendar,
+      // FIX: this previously rendered an active "Connect" button
+      // that did nothing on click — no Google OAuth flow exists in
+      // this codebase (no client ID/secret, no OAuth callback
+      // route). Flagging it disables the button honestly instead of
+      // pretending the integration works.
+      comingSoon: true,
     },
     {
       name: `CRM (${clinic?.crm_provider && clinic.crm_provider !== "none" ? clinic.crm_provider.toUpperCase() : "None"})`,
@@ -325,7 +518,7 @@ export default function ProfilePanel({
             iconBg="var(--teal-surface)"
             iconColor="var(--teal)"
             title="Clinic Profile"
-            action={<EditButton label="Edit clinic profile" />}
+            action={<EditButton label="Edit clinic profile" onClick={openEditClinic} />}
           >
             <div className="flex items-start gap-4">
               <div
@@ -364,7 +557,7 @@ export default function ProfilePanel({
             iconBg="var(--purple-surface)"
             iconColor="var(--purple)"
             title="AI Receptionist"
-            action={<EditButton label="Edit AI receptionist settings" />}
+            action={<EditButton label="Edit AI receptionist settings" onClick={openEditAi} />}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -406,14 +599,17 @@ export default function ProfilePanel({
             iconColor="var(--info-text)"
             title="Team Members"
             action={
-              <button
-                type="button"
-                aria-label="Invite team member"
-                className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
-                style={{ color: "var(--info-text)", background: "var(--info-surface)" }}
-              >
-                <UserPlus size={11} aria-hidden="true" /> Invite
-              </button>
+              (isAdmin || viewerRole === "owner") && (
+                <button
+                  type="button"
+                  aria-label="Invite team member"
+                  onClick={openInvite}
+                  className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
+                  style={{ color: "var(--info-text)", background: "var(--info-surface)" }}
+                >
+                  <UserPlus size={11} aria-hidden="true" /> Invite
+                </button>
+              )
             }
           >
             <ul className="space-y-3" role="list">
@@ -518,15 +714,34 @@ export default function ProfilePanel({
                       <span className="badge text-[10px] flex-shrink-0" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
                         <CheckCircle2 size={9} aria-hidden="true" /> Connected
                       </span>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={`Connect ${i.name}`}
-                        className="text-[10px] font-bold flex-shrink-0 cursor-pointer rounded-lg px-2 py-1 transition-colors"
-                        style={{ color: "var(--purple-text)", background: "var(--purple-surface)" }}
+                    ) : (i as any).comingSoon ? (
+                      <span
+                        className="badge text-[10px] flex-shrink-0"
+                        style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}
+                        title="Google Calendar sync isn't built yet"
                       >
-                        Connect
-                      </button>
+                        Coming soon
+                      </span>
+                    ) : (
+                      /*
+                       * FIX: this previously rendered an active
+                       * "Connect" button with no onClick handler at
+                       * all. Neither of the two integrations that
+                       * land here has a real self-service connect
+                       * flow: the AI Receptionist agent provisions
+                       * automatically once billing goes active (see
+                       * api/webhooks/dodo/route.ts), and CRM
+                       * credentials are set up by Pyrexx staff from
+                       * /admin/clients/[id], not by the clinic. A
+                       * neutral status badge is honest about that
+                       * instead of a button that did nothing.
+                       */
+                      <span
+                        className="badge text-[10px] flex-shrink-0"
+                        style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}
+                      >
+                        Not connected
+                      </span>
                     )}
                   </li>
                 );
@@ -563,10 +778,13 @@ export default function ProfilePanel({
           <div className="flex gap-2">
             <button
               type="button"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              onClick={handleExportData}
+              disabled={exporting || !clinicId}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
               style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
             >
-              <Download size={13} aria-hidden="true" /> Export Data
+              {exporting ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Download size={13} aria-hidden="true" />}
+              {exporting ? "Exporting…" : "Export Data"}
             </button>
             <button
               type="button"
@@ -579,6 +797,112 @@ export default function ProfilePanel({
           </div>
         </div>
       </div>
+
+      {/* Edit Clinic Profile */}
+      <SimpleModal open={editClinicOpen} title="Edit Clinic Profile" onClose={() => setEditClinicOpen(false)}>
+        <form onSubmit={handleSaveClinicProfile} className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Clinic Name</label>
+            <input
+              required
+              value={editClinicForm.name}
+              onChange={(e) => setEditClinicForm((f) => ({ ...f, name: e.target.value }))}
+              className={modalInputClass} style={modalInputStyle}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Phone Number</label>
+            <input
+              required
+              value={editClinicForm.phoneNumber}
+              onChange={(e) => setEditClinicForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+              className={modalInputClass} style={modalInputStyle}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Website (optional)</label>
+            <input
+              value={editClinicForm.website}
+              onChange={(e) => setEditClinicForm((f) => ({ ...f, website: e.target.value }))}
+              placeholder="https://"
+              className={modalInputClass} style={modalInputStyle}
+            />
+          </div>
+          {editClinicError && <p className="text-[11px]" style={{ color: "var(--error-text)" }} role="alert">{editClinicError}</p>}
+          <div className="flex gap-2 justify-end mt-2 pt-3 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+            <button type="button" onClick={() => setEditClinicOpen(false)} className="px-4 py-2 rounded-xl text-xs font-semibold transition-colors" style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}>Cancel</button>
+            <button type="submit" disabled={editClinicSaving} className="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-60" style={{ background: "var(--teal)", color: "#fff" }}>
+              {editClinicSaving && <Loader2 size={12} className="animate-spin" aria-hidden="true" />} Save Changes
+            </button>
+          </div>
+        </form>
+      </SimpleModal>
+
+      {/* Edit AI Receptionist Name */}
+      <SimpleModal open={editAiOpen} title="Edit AI Receptionist" onClose={() => setEditAiOpen(false)}>
+        <form onSubmit={handleSaveAiName} className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Agent Name</label>
+            <input
+              required
+              value={editAiName}
+              onChange={(e) => setEditAiName(e.target.value)}
+              className={modalInputClass} style={modalInputStyle}
+            />
+            <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+              This is the name your AI receptionist uses when answering calls. Voice, hours, and greeting script are configured by Pyrexx during setup — reach out to change those.
+            </p>
+          </div>
+          {editAiError && <p className="text-[11px]" style={{ color: "var(--error-text)" }} role="alert">{editAiError}</p>}
+          <div className="flex gap-2 justify-end mt-2 pt-3 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+            <button type="button" onClick={() => setEditAiOpen(false)} className="px-4 py-2 rounded-xl text-xs font-semibold transition-colors" style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}>Cancel</button>
+            <button type="submit" disabled={editAiSaving} className="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-60" style={{ background: "var(--teal)", color: "#fff" }}>
+              {editAiSaving && <Loader2 size={12} className="animate-spin" aria-hidden="true" />} Save Changes
+            </button>
+          </div>
+        </form>
+      </SimpleModal>
+
+      {/* Invite Team Member */}
+      <SimpleModal open={inviteOpen} title="Invite Team Member" onClose={() => setInviteOpen(false)}>
+        {inviteSuccess ? (
+          <div className="flex flex-col items-center text-center gap-2 py-2">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "var(--success-surface)" }}>
+              <CheckCircle2 size={18} style={{ color: "var(--success-text)" }} aria-hidden="true" />
+            </div>
+            <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>Invite sent to {inviteEmail}</p>
+            <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>They'll get an email with a link to set up their password.</p>
+            <button type="button" onClick={() => setInviteOpen(false)} className="mt-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors" style={{ background: "var(--teal)", color: "#fff" }}>Done</button>
+          </div>
+        ) : (
+          <form onSubmit={handleSendInvite} className="flex flex-col gap-3">
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Email Address</label>
+              <div className="relative">
+                <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+                <input
+                  required
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="teammate@clinic.com"
+                  className={`${modalInputClass} pl-9`} style={modalInputStyle}
+                />
+              </div>
+              <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+                They'll be added as a staff member on your clinic's dashboard.
+              </p>
+            </div>
+            {inviteError && <p className="text-[11px]" style={{ color: "var(--error-text)" }} role="alert">{inviteError}</p>}
+            <div className="flex gap-2 justify-end mt-2 pt-3 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+              <button type="button" onClick={() => setInviteOpen(false)} className="px-4 py-2 rounded-xl text-xs font-semibold transition-colors" style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}>Cancel</button>
+              <button type="submit" disabled={inviteSaving} className="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-60" style={{ background: "var(--teal)", color: "#fff" }}>
+                {inviteSaving && <Loader2 size={12} className="animate-spin" aria-hidden="true" />} Send Invite
+              </button>
+            </div>
+          </form>
+        )}
+      </SimpleModal>
     </motion.div>
   );
 }
