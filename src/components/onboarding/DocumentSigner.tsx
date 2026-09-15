@@ -9,6 +9,17 @@ interface DocumentSignerProps {
   onSignerNameChange: (name: string) => void;
   allSigned: boolean;
   onAllSignedChange: (signed: boolean) => void;
+  /**
+   * Fired once, right after the active documents are fetched, with
+   * the exact list (including each document's real `.version`) that
+   * was shown to the signer. OnboardingWizard uses this to build the
+   * `signedDocuments` payload sent to /api/onboarding/start — it
+   * previously had no access to this list at all and hardcoded both
+   * the document-type list AND a "PLACEHOLDER-v0" version string,
+   * so `signed_agreements.document_version` never reflected what was
+   * actually shown/signed.
+   */
+  onDocumentsLoaded: (docs: LegalDocument[]) => void;
 }
 
 function renderMarkdown(md: string): string {
@@ -105,7 +116,7 @@ function DocumentCard({ doc, onAcknowledged }: { doc: LegalDocument; onAcknowled
 }
 
 export default function DocumentSigner({
-  signerName, onSignerNameChange, allSigned, onAllSignedChange,
+  signerName, onSignerNameChange, allSigned, onAllSignedChange, onDocumentsLoaded,
 }: DocumentSignerProps) {
   const [documents, setDocuments] = useState<LegalDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
@@ -116,9 +127,14 @@ export default function DocumentSigner({
       setLoadingDocs(true);
       const docs = await getLegalDocuments();
       setDocuments(docs);
+      onDocumentsLoaded(docs);
       setLoadingDocs(false);
     }
     loadDocs();
+    // Only ever needs to run once on mount — onDocumentsLoaded is a
+    // stable callback from the parent (see OnboardingWizard's useCallback-free
+    // but effectively-static setLegalDocuments setter usage).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const markRead = (type: string) => {

@@ -52,6 +52,10 @@ export async function provisionAiReceptionistAgent(
     const escalationNumber = clinic.escalation_phone_number || clinic.phone_number;
 
     // 1. Create LLM Response Engine
+    // `clinic_id` in default_dynamic_variables is what lets
+    // lib/retell/mapper.ts attribute every inbound call back to this
+    // clinic (see mapper.ts's resolveClinicId doc comment for what
+    // happens — and used to happen — when this is missing).
     const llm = await client.llm.create({
       model: "gpt-4.1",
       general_prompt: buildSystemPrompt(clinic),
@@ -68,6 +72,7 @@ export async function provisionAiReceptionistAgent(
         },
       ],
       default_dynamic_variables: {
+        clinic_id: clinic.id,
         clinic_name: clinic.name,
         receptionist_name: clinic.receptionist_name,
       },

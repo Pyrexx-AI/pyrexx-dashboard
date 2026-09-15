@@ -52,15 +52,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden: You cannot access another clinic's call records." }, { status: 403 });
   }
 
-  const [recent, confirmed, scheduled] = await Promise.all([
+  // FIX: previously queried getByStatus(clinicId, "Scheduled", 5) —
+  // but lib/retell/mapper.ts's resolveStatus() never actually
+  // produces "Scheduled" (only "Completed", "Confirmed", or
+  // "Escalated"), so this always returned an empty array regardless
+  // of how many real upcoming bookings existed. getUpcomingBookings
+  // instead looks at real future booking_time values.
+  const [recent, confirmed, upcoming] = await Promise.all([
     callRecordStore.getByStatus(clinicId, "Completed", 5),
     callRecordStore.getByStatus(clinicId, "Confirmed", 5),
-    callRecordStore.getByStatus(clinicId, "Scheduled", 5),
+    callRecordStore.getUpcomingBookings(clinicId, 5),
   ]);
 
   return NextResponse.json({
     recentCalls: recent.map(toMeeting),
     recentlyBooked: confirmed.map(toMeeting),
-    upcomingBookings: scheduled.map(toMeeting),
+    upcomingBookings: upcoming.map(toMeeting),
   });
 }

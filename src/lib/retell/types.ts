@@ -88,7 +88,7 @@ export interface RetellWebhookPayload {
  */
 export interface CallRecord {
   id: string;                 // = call_id
-  clinicId: string;           // which Pyrexx client this call belongs to
+  clinicId: string | null;    // which Pyrexx client this call belongs to — null if unresolvable (see mapper.ts resolveClinicId)
   patientName: string;        // from dynamic variables, fallback "Unknown Caller"
   serviceType: string;        // from dynamic variables / custom analysis
   status: "Completed" | "Scheduled" | "Confirmed" | "Escalated";

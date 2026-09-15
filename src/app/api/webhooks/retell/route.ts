@@ -27,7 +27,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRetellSignature } from "@/lib/retell/verify-signature";
 import { mapRetellCallToRecord } from "@/lib/retell/mapper";
-import { callRecordStore } from "@/lib/retell/store";
+import { callRecordStore, UnattributableCallError } from "@/lib/retell/store";
 import type { RetellWebhookPayload } from "@/lib/retell/types";
 
 export async function POST(req: NextRequest) {
@@ -65,8 +65,40 @@ export async function POST(req: NextRequest) {
   //    call_started / call_ended / call_analyzed all share the same
   //    call_id, so this naturally builds up the record over the
   //    lifecycle of a single call (see store.ts schema notes).
+  //
+  //    FIX: this previously called `await callRecordStore.upsert(record)`
+  //    unguarded. If `resolveClinicId()` couldn't attribute the call
+  //    to a clinic (metadata/dynamic variables missing clinic_id),
+  //    the DB insert was GUARANTEED to fail its foreign-key
+  //    constraint, throw inside this handler, and produce an
+  //    unhandled 500 — which made Retell retry up to 3 times for a
+  //    problem retrying could never fix (a config issue, not a
+  //    transient one), and dropped the call data either way.
+  //
+  //    Now: attribution failures are caught, logged loudly with
+  //    enough detail to fix the clinic's agent config, and
+  //    acknowledged with 200 so Retell doesn't burn retries on a
+  //    call that will never insert successfully. Any other/unexpected
+  //    storage error is also caught and logged — Retell will still
+  //    see a 500 for those and retry, since those ARE plausibly
+  //    transient (e.g. a Supabase blip).
   const record = mapRetellCallToRecord(event, call);
-  await callRecordStore.upsert(record);
+  try {
+    await callRecordStore.upsert(record);
+  } catch (err) {
+    if (err instanceof UnattributableCallError) {
+      console.error(
+        `[Retell Webhook] Dropping call ${call.call_id} (agent ${call.agent_id}): ` +
+        `no clinic_id in metadata or dynamic variables. ` +
+        `Fix this agent's default_dynamic_variables in Retell, or re-run provisioning ` +
+        `(see lib/retell/provision.ts) so future calls attribute correctly.`
+      );
+      return NextResponse.json({ received: true, warning: "unattributable_call_dropped" });
+    }
+
+    console.error(`[Retell Webhook] Failed to store call ${call.call_id}:`, err);
+    return NextResponse.json({ error: "Storage failure" }, { status: 500 });
+  }
 
   // 4. Event-specific side effects.
   //    Keep these fire-and-forget (don't await slow operations) —

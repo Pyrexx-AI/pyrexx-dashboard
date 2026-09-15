@@ -6,24 +6,41 @@
  *
  * MULTI-TENANT NOTE:
  * `clinicId` is resolved from `call.metadata.clinic_id` or
- * `call.retell_llm_dynamic_variables.clinic_id`. Set this when
- * configuring each clinic's Retell agent (Agent → Metadata, or as
- * a dynamic variable injected at call start) so calls from
- * different clinics route to the correct dashboard tenant. If
- * Pyrexx runs ONE Retell agent per clinic (most common setup),
- * `agent_id` itself can serve as the clinic identifier instead —
- * see RETELL_INTEGRATION.md "Multi-clinic strategy".
+ * `call.retell_llm_dynamic_variables.clinic_id`. This is set
+ * automatically for every clinic at agent-provisioning time (see
+ * lib/retell/provision.ts's `default_dynamic_variables`), so it
+ * should always be present. If it's ever missing, `resolveClinicId`
+ * returns `null` rather than guessing — see its doc comment for why
+ * `agent_id` can never be used as a fallback here.
  */
 
 import type { CallRecord, RetellCall, RetellWebhookEvent } from "./types";
 
-function resolveClinicId(call: RetellCall): string {
+/**
+ * Resolves which clinic a call belongs to, or null if it can't be
+ * determined safely.
+ *
+ * FIX: this previously fell back to `call.agent_id` when no
+ * `clinic_id` was present in metadata/dynamic variables. That
+ * fallback was never actually safe — `call_records.clinic_id` has a
+ * foreign-key constraint against `clinics.id` (a Supabase UUID),
+ * and `agent_id` is a Retell-generated ID in a completely different
+ * ID namespace. It could never satisfy that FK, so any call missing
+ * `clinic_id` metadata was GUARANTEED to throw on
+ * `callRecordStore.upsert()` — not a rare edge case, a certainty.
+ *
+ * The real fix is ensuring `clinic_id` is always injected as a
+ * default dynamic variable at agent-provisioning time (see
+ * lib/retell/provision.ts). This function now returns `null` when
+ * that's missing, so the caller (the webhook route) can log and
+ * skip the record instead of crashing on every retry.
+ */
+function resolveClinicId(call: RetellCall): string | null {
   const fromMetadata = call.metadata?.["clinic_id"];
   const fromDynamic = call.retell_llm_dynamic_variables?.["clinic_id"];
-  if (typeof fromMetadata === "string") return fromMetadata;
-  if (typeof fromDynamic === "string") return fromDynamic;
-  // Fallback: one-agent-per-clinic setups can key off agent_id directly
-  return call.agent_id;
+  if (typeof fromMetadata === "string" && fromMetadata) return fromMetadata;
+  if (typeof fromDynamic === "string" && fromDynamic) return fromDynamic;
+  return null;
 }
 
 function resolveStatus(event: RetellWebhookEvent, call: RetellCall): CallRecord["status"] {

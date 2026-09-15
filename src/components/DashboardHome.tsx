@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   LayoutDashboard, BarChart3, ChevronRight, CalendarCheck, Sparkles,
   CheckCircle2, Clock, AlertCircle, CalendarClock, TrendingUp, Zap, UserCircle2,
-  Eye, ArrowLeft
+  Eye, ArrowLeft, Loader2, Inbox
 } from "lucide-react";
 import DonutChart from "./DonutChart";
 import MeetingModal, { Meeting } from "./MeetingModal";
@@ -17,6 +17,7 @@ import AnalyticsPanel from "./AnalyticsPanel";
 import ProfilePanel from "./ProfilePanel";
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "./ui/ThemeToggle";
+import type { DashboardMetrics, OutcomeCounts, ServiceBreakdownEntry } from "@/lib/dashboard/metrics";
 
 const containerV: Variants = {
   hidden: { opacity: 0 },
@@ -27,22 +28,48 @@ const itemV: Variants = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } },
 };
 
-/* ─── Mock Initial Data Fallbacks ────────────────────────────────── */
-const initialRecentCalls: Meeting[] = [
-  { id: 1, name: "Sarah Jenkins",  type: "Botox Consult",    time: "Today, 10:00 AM",    status: "Completed", transcriptPreview: "Client asked about recovery time. AI explained 24-48h, booked follow-up." },
-  { id: 2, name: "Mike Ross",      type: "Back Massage",     time: "Yesterday, 2:30 PM", status: "Completed", transcriptPreview: "60-min deep tissue confirmed. Intake forms sent via SMS." },
-  { id: 3, name: "Emily Clark",    type: "Pricing Inquiry",  time: "Yesterday, 4:15 PM", status: "Completed", transcriptPreview: "Provided tier pricing. Client will call back to schedule." },
-];
+/*
+ * REAL DATA NOTE:
+ * This component previously seeded `recentCalls` / `recentlyBooked`
+ * / `upcomingBookings` from hardcoded mock arrays ("Sarah Jenkins,
+ * Botox Consult", etc.) and NEVER called the real
+ * /api/dashboard/summary or /api/dashboard/metrics endpoints — both
+ * already existed and were fully authenticated/authorized, they
+ * were just never wired up. Every clinic saw the exact same fake
+ * dashboard regardless of their actual call activity. The only
+ * "live" mechanism was the Supabase Realtime subscription below,
+ * which prepended new rows onto the mock seed data.
+ *
+ * Fixed by fetching both endpoints on mount (and whenever the
+ * clinic changes), with loading/empty states, and by wiring the
+ * DonutChart trio / InsightsCard / OutcomesCard to
+ * /api/dashboard/metrics's real aggregates instead of static
+ * numbers.
+ */
 
-const initialRecentlyBooked: Meeting[] = [
-  { id: 6,  name: "Rachel Green",   type: "Microneedling",  time: "Today, 3:30 PM",    status: "Confirmed", bookedAt: "just now",   transcriptPreview: "New client. AI collected intake info and sent confirmation SMS." },
-  { id: 7,  name: "Tom Harrington", type: "LED Therapy",    time: "Tomorrow, 2:00 PM", status: "Confirmed", bookedAt: "12 min ago", transcriptPreview: "Returning client. AI offered preferred time slot automatically." },
-];
+const EMPTY_METRICS: DashboardMetrics = {
+  range: "7D",
+  totalCalls: 0,
+  bookingsMade: 0,
+  conversionRatePct: 0,
+  pickupRatePct: 0,
+  avgHandleTimeSeconds: 0,
+  avgHandleTimeLabel: "0m 0s",
+  trends: {
+    totalCalls: { direction: "flat", label: "0%", positive: true },
+    bookingsMade: { direction: "flat", label: "0%", positive: true },
+    conversionRate: { direction: "flat", label: "0%", positive: true },
+    pickupRate: { direction: "flat", label: "0%", positive: true },
+    avgHandleTime: { direction: "flat", label: "0%", positive: true },
+  },
+  outcomes: { booked: 0, callback_requested: 0, escalated: 0, no_action: 0 },
+  serviceBreakdown: [],
+  volume: [],
+  peakHours: [],
+  topServices: [],
+};
 
-const initialUpcomingBookings: Meeting[] = [
-  { id: 11, name: "Jessica Alba",    type: "Botox Follow-up", time: "Today, 3:00 PM",    status: "Scheduled", transcriptPreview: "Prefers Dr. Smith. VIP note added to CRM." },
-  { id: 12, name: "David Chen",      type: "Consultation",    time: "Tomorrow, 9:00 AM", status: "Scheduled", transcriptPreview: "First visit. Waiver must be completed before arrival." },
-];
+const INTENT_COLORS = ["var(--teal)", "var(--purple)", "#60A5FA", "#F59E0B", "#EC4899"];
 
 function statusStyle(status: string) {
   switch (status) {
@@ -79,7 +106,16 @@ function MeetingRow({ meeting, onSelect }: { meeting: Meeting; onSelect: (m: Mee
   );
 }
 
-function ListCard({ title, icon: Icon, iconBg, iconColor, meetings, onSelectMeeting, onViewAll }: any) {
+function EmptyRow({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center">
+      <Inbox size={18} style={{ color: "var(--text-placeholder)" }} aria-hidden="true" />
+      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</p>
+    </div>
+  );
+}
+
+function ListCard({ title, icon: Icon, iconBg, iconColor, meetings, loading, emptyLabel, onSelectMeeting, onViewAll }: any) {
   const preview = meetings.slice(0, 3);
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-3">
@@ -100,21 +136,20 @@ function ListCard({ title, icon: Icon, iconBg, iconColor, meetings, onSelectMeet
         </button>
       </div>
       <div role="list" className="flex flex-col">
-        {preview.map((m: any) => (
-          <MeetingRow key={m.id} meeting={m} onSelect={onSelectMeeting} />
-        ))}
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin" style={{ color: "var(--text-muted)" }} /></div>
+        ) : preview.length === 0 ? (
+          <EmptyRow label={emptyLabel} />
+        ) : (
+          preview.map((m: any) => <MeetingRow key={m.id} meeting={m} onSelect={onSelectMeeting} />)
+        )}
       </div>
     </motion.section>
   );
 }
 
-function InsightsCard() {
-  const intents = [
-    { label: "Botox / Injectables", pct: 45, color: "var(--teal)" },
-    { label: "Massage & Body", pct: 28, color: "var(--purple)" },
-    { label: "Facials & Skin", pct: 18, color: "#60A5FA" },
-    { label: "General Inquiries", pct: 9, color: "#F59E0B" },
-  ];
+function InsightsCard({ serviceBreakdown, loading }: { serviceBreakdown: ServiceBreakdownEntry[]; loading: boolean }) {
+  const intents = serviceBreakdown.map((s, i) => ({ label: s.name, pct: s.value, color: INTENT_COLORS[i % INTENT_COLORS.length] }));
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2.5">
@@ -123,38 +158,46 @@ function InsightsCard() {
         </div>
         <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Call Intents</h2>
       </div>
-      <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img">
-        {intents.map((i) => (
-          <div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />
-        ))}
-      </div>
-      <ul className="space-y-2.5" role="list">
-        {intents.map((i) => (
-          <li key={i.label}>
-            <div className="flex justify-between items-center mb-1">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i.color }} aria-hidden="true" />
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{i.label}</span>
-              </div>
-              <span className="text-xs font-bold" style={{ color: i.color }}>{i.pct}%</span>
-            </div>
-            <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}>
-              <motion.div className="h-full rounded-full" style={{ background: i.color }} initial={{ width: 0 }} animate={{ width: `${i.pct}%` }} transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} />
-            </div>
-          </li>
-        ))}
-      </ul>
+      {loading ? (
+        <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin" style={{ color: "var(--text-muted)" }} /></div>
+      ) : intents.length === 0 ? (
+        <EmptyRow label="No calls yet this week" />
+      ) : (
+        <>
+          <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img">
+            {intents.map((i) => (
+              <div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />
+            ))}
+          </div>
+          <ul className="space-y-2.5" role="list">
+            {intents.map((i) => (
+              <li key={i.label}>
+                <div className="flex justify-between items-center mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i.color }} aria-hidden="true" />
+                    <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{i.label}</span>
+                  </div>
+                  <span className="text-xs font-bold flex-shrink-0" style={{ color: i.color }}>{i.pct}%</span>
+                </div>
+                <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}>
+                  <motion.div className="h-full rounded-full" style={{ background: i.color }} initial={{ width: 0 }} animate={{ width: `${i.pct}%` }} transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </motion.section>
   );
 }
 
-function OutcomesCard() {
-  const outcomes = [
-    { label: "Appointment Booked",  count: 38, Icon: CheckCircle2, bg: "var(--success-surface)", color: "var(--success-text)" },
-    { label: "Callback Requested",  count: 12, Icon: Clock,        bg: "var(--warning-surface)", color: "var(--warning-text)" },
-    { label: "Escalated to Staff",  count: 4,  Icon: AlertCircle,  bg: "var(--info-surface)",    color: "var(--info-text)" },
+function OutcomesCard({ outcomes, loading }: { outcomes: OutcomeCounts; loading: boolean }) {
+  const outcomeList = [
+    { label: "Appointment Booked",  count: outcomes.booked,             Icon: CheckCircle2, bg: "var(--success-surface)", color: "var(--success-text)" },
+    { label: "Callback Requested",  count: outcomes.callback_requested, Icon: Clock,        bg: "var(--warning-surface)", color: "var(--warning-text)" },
+    { label: "Escalated to Staff",  count: outcomes.escalated,          Icon: AlertCircle,  bg: "var(--info-surface)",    color: "var(--info-text)" },
   ];
-  const total = outcomes.reduce((s, o) => s + o.count, 0);
+  const total = outcomeList.reduce((s, o) => s + o.count, 0);
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2.5">
@@ -163,32 +206,44 @@ function OutcomesCard() {
         </div>
         <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Outcomes</h2>
         <span className="ml-auto text-xs font-semibold badge" style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}>
-          {total} today
+          {total} this week
         </span>
       </div>
-      <ul className="space-y-3" role="list">
-        {outcomes.map(({ label, count, Icon, bg, color }) => {
-          const pct = Math.round((count / total) * 100);
-          return (
-            <li key={label} className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-                <Icon size={14} style={{ color }} aria-hidden="true" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
-                  <span className="text-xs font-bold" style={{ color }}>{count}</span>
+      {loading ? (
+        <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin" style={{ color: "var(--text-muted)" }} /></div>
+      ) : total === 0 ? (
+        <EmptyRow label="No outcomes recorded yet this week" />
+      ) : (
+        <ul className="space-y-3" role="list">
+          {outcomeList.map(({ label, count, Icon, bg, color }) => {
+            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            return (
+              <li key={label} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+                  <Icon size={14} style={{ color }} aria-hidden="true" />
                 </div>
-                <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}>
-                  <motion.div className="h-full rounded-full" style={{ background: color }} initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
+                    <span className="text-xs font-bold" style={{ color }}>{count}</span>
+                  </div>
+                  <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}>
+                    <motion.div className="h-full rounded-full" style={{ background: color }} initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }} />
+                  </div>
                 </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </motion.section>
   );
+}
+
+function trendSubtitle(trend: { direction: "up" | "down" | "flat"; label: string }, suffix = "vs last wk"): string {
+  if (trend.direction === "flat") return `No change ${suffix}`;
+  const sign = trend.direction === "up" ? "+" : "-";
+  return `${sign}${trend.label} ${suffix}`;
 }
 
 function DashboardPanel({
@@ -196,36 +251,74 @@ function DashboardPanel({
   recentCalls,
   recentlyBooked,
   upcomingBookings,
+  metrics,
+  loadingSummary,
+  loadingMetrics,
+  hasClinic,
 }: {
   onSelectMeeting: (m: Meeting) => void;
   recentCalls: Meeting[];
   recentlyBooked: Meeting[];
   upcomingBookings: Meeting[];
+  metrics: DashboardMetrics;
+  loadingSummary: boolean;
+  loadingMetrics: boolean;
+  hasClinic: boolean;
 }) {
   const [openList, setOpenList] = useState<"recent" | "booked" | "upcoming" | null>(null);
+
+  if (!hasClinic) {
+    return (
+      <div className="card p-10 flex flex-col items-center justify-center text-center gap-2">
+        <Inbox size={28} style={{ color: "var(--text-placeholder)" }} aria-hidden="true" />
+        <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>No clinic linked to this account yet</p>
+        <p className="text-xs max-w-sm" style={{ color: "var(--text-muted)" }}>
+          Once your account is linked to a clinic, your call activity and analytics will appear here. Check the Profile tab, or contact Pyrexx support.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
       {/* Main Stage (8 Cols on Desktop) */}
       <div className="xl:col-span-8 flex flex-col gap-5">
         <motion.div variants={itemV} className="grid grid-cols-3 gap-3 md:gap-4">
-          <DonutChart title="Pickup Rate" value="98.5%" percentage={98.5} subtitle="+2.1% vs last wk" trend={{ direction: "up", label: "2.1%" }} />
-          <DonutChart title="Conversion" value="42.3%" percentage={42.3} subtitle="+5.4% vs last wk" trend={{ direction: "up", label: "5.4%" }} />
-          <DonutChart title="Total Calls" value="1,245" percentage={75} subtitle="245 this week" trend={{ direction: "up", label: "12%" }} />
+          <DonutChart
+            title="Pickup Rate"
+            value={loadingMetrics ? "--" : `${metrics.pickupRatePct.toFixed(1)}%`}
+            percentage={loadingMetrics ? 0 : metrics.pickupRatePct}
+            subtitle={loadingMetrics ? "Loading…" : trendSubtitle(metrics.trends.pickupRate)}
+            trend={loadingMetrics ? undefined : { direction: metrics.trends.pickupRate.direction, label: metrics.trends.pickupRate.label }}
+          />
+          <DonutChart
+            title="Conversion"
+            value={loadingMetrics ? "--" : `${metrics.conversionRatePct.toFixed(1)}%`}
+            percentage={loadingMetrics ? 0 : metrics.conversionRatePct}
+            subtitle={loadingMetrics ? "Loading…" : trendSubtitle(metrics.trends.conversionRate)}
+            trend={loadingMetrics ? undefined : { direction: metrics.trends.conversionRate.direction, label: metrics.trends.conversionRate.label }}
+          />
+          <DonutChart
+            title="Total Calls"
+            value={loadingMetrics ? "--" : metrics.totalCalls.toLocaleString()}
+            percentage={loadingMetrics || metrics.totalCalls === 0 ? 0 : 100}
+            subtitle={loadingMetrics ? "Loading…" : `${metrics.totalCalls} this week`}
+            trend={loadingMetrics ? undefined : { direction: metrics.trends.totalCalls.direction, label: metrics.trends.totalCalls.label }}
+          />
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ListCard title="Recent Calls" icon={CalendarCheck} iconBg="var(--teal-surface)" iconColor="var(--teal-text)" meetings={recentCalls} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("recent")} />
-          <ListCard title="Recently Booked" icon={Sparkles} iconBg="var(--purple-surface)" iconColor="var(--purple-text)" meetings={recentlyBooked} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("booked")} />
+          <ListCard title="Recent Calls" icon={CalendarCheck} iconBg="var(--teal-surface)" iconColor="var(--teal-text)" meetings={recentCalls} loading={loadingSummary} emptyLabel="No calls yet" onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("recent")} />
+          <ListCard title="Recently Booked" icon={Sparkles} iconBg="var(--purple-surface)" iconColor="var(--purple-text)" meetings={recentlyBooked} loading={loadingSummary} emptyLabel="No bookings yet" onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("booked")} />
         </div>
 
-        <InsightsCard />
+        <InsightsCard serviceBreakdown={metrics.serviceBreakdown} loading={loadingMetrics} />
       </div>
 
       {/* Command Rail (4 Cols on Desktop) */}
       <div className="xl:col-span-4 flex flex-col gap-5">
-        <ListCard title="Upcoming" icon={CalendarClock} iconBg="var(--info-surface)" iconColor="var(--info-text)" meetings={upcomingBookings} onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("upcoming")} />
-        <OutcomesCard />
+        <ListCard title="Upcoming" icon={CalendarClock} iconBg="var(--info-surface)" iconColor="var(--info-text)" meetings={upcomingBookings} loading={loadingSummary} emptyLabel="No upcoming appointments" onSelectMeeting={onSelectMeeting} onViewAll={() => setOpenList("upcoming")} />
+        <OutcomesCard outcomes={metrics.outcomes} loading={loadingMetrics} />
       </div>
 
       <ListModal isOpen={openList === "recent"} onClose={() => setOpenList(null)} title="Recent Calls" subtitle="All completed AI calls" meetings={recentCalls} onSelectMeeting={onSelectMeeting} variant="recent" />
@@ -269,16 +362,63 @@ export default function DashboardHome({
   const [selectedMeeting, setSelected] = useState<Meeting | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  const [recentCalls, setRecentCalls] = useState<Meeting[]>(initialRecentCalls);
-  const [recentlyBooked, setRecentlyBooked] = useState<Meeting[]>(initialRecentlyBooked);
-  const [upcomingBookings, setUpcomingBookings] = useState<Meeting[]>(initialUpcomingBookings);
+  const [recentCalls, setRecentCalls] = useState<Meeting[]>([]);
+  const [recentlyBooked, setRecentlyBooked] = useState<Meeting[]>([]);
+  const [upcomingBookings, setUpcomingBookings] = useState<Meeting[]>([]);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+
+  const [metrics, setMetrics] = useState<DashboardMetrics>(EMPTY_METRICS);
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
 
   const tabPanelId = useId();
+
+  const fetchSummary = useCallback(async (clinicId: string) => {
+    setLoadingSummary(true);
+    try {
+      const res = await fetch(`/api/dashboard/summary?clinicId=${encodeURIComponent(clinicId)}`);
+      if (res.ok) {
+        const json = await res.json();
+        setRecentCalls(json.recentCalls ?? []);
+        setRecentlyBooked(json.recentlyBooked ?? []);
+        setUpcomingBookings(json.upcomingBookings ?? []);
+      } else {
+        console.error("Failed to load dashboard summary:", await res.text());
+      }
+    } catch (err) {
+      console.error("Failed to load dashboard summary:", err);
+    } finally {
+      setLoadingSummary(false);
+    }
+  }, []);
+
+  const fetchMetrics = useCallback(async (clinicId: string) => {
+    setLoadingMetrics(true);
+    try {
+      const res = await fetch(`/api/dashboard/metrics?clinicId=${encodeURIComponent(clinicId)}&range=7D`);
+      if (res.ok) {
+        const json = await res.json();
+        setMetrics(json);
+      } else {
+        console.error("Failed to load dashboard metrics:", await res.text());
+      }
+    } catch (err) {
+      console.error("Failed to load dashboard metrics:", err);
+    } finally {
+      setLoadingMetrics(false);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
 
-    if (!initialClinicId) return;
+    if (!initialClinicId) {
+      setLoadingSummary(false);
+      setLoadingMetrics(false);
+      return;
+    }
+
+    fetchSummary(initialClinicId);
+    fetchMetrics(initialClinicId);
 
     const supabase = createClient();
     const channel = supabase
@@ -309,6 +449,13 @@ export default function DashboardHome({
           if (row.outcome === "booked") {
             setRecentlyBooked((prev) => [newMeeting, ...prev]);
           }
+          // Note: this only appends to the two list cards in real
+          // time. The KPI/trend numbers from /api/dashboard/metrics
+          // don't recompute live — they refresh on next mount/tab
+          // switch. Re-aggregating client-side on every realtime
+          // event would need the raw record set kept in sync here
+          // too; deferred as a follow-up rather than scope-creeping
+          // this fix.
         }
       )
       .subscribe();
@@ -316,7 +463,7 @@ export default function DashboardHome({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [initialClinicId]);
+  }, [initialClinicId, fetchSummary, fetchMetrics]);
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
@@ -409,9 +556,13 @@ export default function DashboardHome({
                 recentCalls={recentCalls}
                 recentlyBooked={recentlyBooked}
                 upcomingBookings={upcomingBookings}
+                metrics={metrics}
+                loadingSummary={loadingSummary}
+                loadingMetrics={loadingMetrics}
+                hasClinic={!!initialClinicId}
               />
             ) : activeTab === "analytics" ? (
-              <AnalyticsPanel />
+              <AnalyticsPanel clinicId={initialClinicId} />
             ) : (
               <ProfilePanel
                 clinicId={initialClinicId}
