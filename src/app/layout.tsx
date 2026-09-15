@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,6 +32,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
