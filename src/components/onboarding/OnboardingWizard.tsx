@@ -37,6 +37,7 @@ import DocumentSigner from "./DocumentSigner";
 import EmbeddedCheckout from "./EmbeddedCheckout";
 import AccountStep from "./AccountStep";
 import type { CrmProvider, PlanTier } from "@/types/database";
+import type { LegalDocument } from "@/lib/legal-docs";
 
 /* ─── Step config ───────────────────────────────────────────────── */
 const STEPS = ["Clinic", "Contact", "CRM", "Plan", "Receptionist", "Documents", "Payment", "Account"] as const;
@@ -108,6 +109,11 @@ export default function OnboardingWizard() {
     crmProvider: "", crmOtherName: "", planTier: "", receptionistName: "", signerName: "",
   });
   const [docsSigned, setDocsSigned] = useState(false);
+  // Populated by DocumentSigner once it fetches the active documents
+  // — this is what /api/onboarding/start's signedDocuments payload
+  // is built from, so document_version reflects what was actually
+  // shown, instead of a hardcoded "PLACEHOLDER-v0".
+  const [legalDocuments, setLegalDocuments] = useState<LegalDocument[]>([]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -154,15 +160,11 @@ export default function OnboardingWizard() {
             crmOtherName: form.crmProvider === "other" ? form.crmOtherName : null,
             receptionistName: form.receptionistName,
             planTier: form.planTier,
-            signedDocuments: [
-              // One signature event per document type, all sharing
-              // the same typed name (see DocumentSigner.tsx).
-              ...["msa", "sow", "baa", "dpa", "privacy_policy", "terms_of_service"].map((documentType) => ({
-                documentType,
-                documentVersion: "PLACEHOLDER-v0", // mirrors lib/legal-docs/index.ts — update together
-                signerName: form.signerName,
-              })),
-            ],
+            signedDocuments: legalDocuments.map((doc) => ({
+              documentType: doc.type,
+              documentVersion: doc.version,
+              signerName: form.signerName,
+            })),
           }),
         });
         const json = await res.json();
@@ -338,6 +340,7 @@ export default function OnboardingWizard() {
                     onSignerNameChange={(name) => update("signerName", name)}
                     allSigned={docsSigned}
                     onAllSignedChange={setDocsSigned}
+                    onDocumentsLoaded={setLegalDocuments}
                   />
                 </>
               )}

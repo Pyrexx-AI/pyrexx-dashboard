@@ -1,16 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, type Variants } from "framer-motion";
 import {
   Phone, CalendarCheck2, Percent, Timer,
   TrendingUp, TrendingDown, Minus,
-  Activity, PieChart as PieChartIcon, ListOrdered,
+  Activity, PieChart as PieChartIcon, ListOrdered, Loader2, Inbox,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
+import type { DashboardMetrics, MetricsRange } from "@/lib/dashboard/metrics";
+
+/*
+ * REAL DATA NOTE:
+ * This panel previously rendered entirely hardcoded mock data
+ * (kpisByRange / volumeByRange / peakHoursData / serviceBreakdown /
+ * topServices — all static, identical for every clinic). It also
+ * never received a `clinicId` prop from DashboardHome at all, so
+ * there was no way to wire it to real data without this change.
+ * Now it fetches /api/dashboard/metrics for the selected clinic and
+ * range and renders everything from that response.
+ */
 
 /* ─── Variants ──────────────────────────────────────────────────── */
 const containerV: Variants = {
@@ -23,13 +35,13 @@ const itemV: Variants = {
 };
 
 /* ─── Types ─────────────────────────────────────────────────────── */
-type Range = "7D" | "30D" | "90D";
+type Range = MetricsRange;
 const RANGES: Range[] = ["7D", "30D", "90D"];
 
 interface TrendInfo {
   direction: "up" | "down" | "flat";
   label: string;
-  positive: boolean; // does this direction represent a GOOD outcome for this metric?
+  positive: boolean;
 }
 interface KpiData {
   label: string;
@@ -40,79 +52,36 @@ interface KpiData {
   iconColor: string;
 }
 
-/* ─── Data ──────────────────────────────────────────────────────── */
-const kpisByRange: Record<Range, KpiData[]> = {
-  "7D": [
-    { label: "Total Calls",      value: "1,167",  trend: { direction: "up",   label: "8.2%",  positive: true  }, icon: Phone,         iconBg: "var(--teal-surface)",   iconColor: "var(--teal)"   },
-    { label: "Bookings Made",    value: "501",    trend: { direction: "up",   label: "12.4%", positive: true  }, icon: CalendarCheck2,iconBg: "var(--purple-surface)", iconColor: "var(--purple)" },
-    { label: "Conversion Rate",  value: "42.9%",  trend: { direction: "up",   label: "2.1%",  positive: true  }, icon: Percent,       iconBg: "var(--info-surface)",   iconColor: "var(--info-text)" },
-    { label: "Avg Handle Time",  value: "3m 24s", trend: { direction: "down", label: "0.4%",  positive: true  }, icon: Timer,         iconBg: "var(--success-surface)",iconColor: "var(--success-text)" },
-  ],
-  "30D": [
-    { label: "Total Calls",      value: "4,317",  trend: { direction: "up",   label: "11.6%", positive: true  }, icon: Phone,         iconBg: "var(--teal-surface)",   iconColor: "var(--teal)"   },
-    { label: "Bookings Made",    value: "1,844",  trend: { direction: "up",   label: "15.8%", positive: true  }, icon: CalendarCheck2,iconBg: "var(--purple-surface)", iconColor: "var(--purple)" },
-    { label: "Conversion Rate",  value: "42.7%",  trend: { direction: "up",   label: "1.3%",  positive: true  }, icon: Percent,       iconBg: "var(--info-surface)",   iconColor: "var(--info-text)" },
-    { label: "Avg Handle Time",  value: "3m 31s", trend: { direction: "up",   label: "2.0%",  positive: false }, icon: Timer,         iconBg: "var(--success-surface)",iconColor: "var(--success-text)" },
-  ],
-  "90D": [
-    { label: "Total Calls",      value: "12,547", trend: { direction: "up",   label: "22.3%", positive: true  }, icon: Phone,         iconBg: "var(--teal-surface)",   iconColor: "var(--teal)"   },
-    { label: "Bookings Made",    value: "5,304",  trend: { direction: "up",   label: "27.1%", positive: true  }, icon: CalendarCheck2,iconBg: "var(--purple-surface)", iconColor: "var(--purple)" },
-    { label: "Conversion Rate",  value: "42.3%",  trend: { direction: "flat", label: "0.1%",  positive: true  }, icon: Percent,       iconBg: "var(--info-surface)",   iconColor: "var(--info-text)" },
-    { label: "Avg Handle Time",  value: "3m 28s", trend: { direction: "down", label: "1.2%",  positive: true  }, icon: Timer,         iconBg: "var(--success-surface)",iconColor: "var(--success-text)" },
-  ],
-};
+const SERVICE_COLORS = ["#48C4C6", "#8952A5", "#60A5FA", "#F59E0B", "#EC4899"];
 
-const volumeByRange: Record<Range, { label: string; calls: number; bookings: number }[]> = {
-  "7D": [
-    { label: "Mon", calls: 142, bookings: 58 },
-    { label: "Tue", calls: 168, bookings: 71 },
-    { label: "Wed", calls: 155, bookings: 64 },
-    { label: "Thu", calls: 189, bookings: 82 },
-    { label: "Fri", calls: 203, bookings: 95 },
-    { label: "Sat", calls: 176, bookings: 79 },
-    { label: "Sun", calls: 134, bookings: 52 },
-  ],
-  "30D": [
-    { label: "Wk 1", calls: 980,  bookings: 410 },
-    { label: "Wk 2", calls: 1120, bookings: 478 },
-    { label: "Wk 3", calls: 1050, bookings: 455 },
-    { label: "Wk 4", calls: 1167, bookings: 501 },
-  ],
-  "90D": [
-    { label: "Apr", calls: 3920, bookings: 1640 },
-    { label: "May", calls: 4310, bookings: 1820 },
-    { label: "Jun", calls: 4317, bookings: 1844 },
-  ],
-};
-
-const peakHoursData = [
-  { hour: "8am",  calls: 12 },
-  { hour: "9am",  calls: 28 },
-  { hour: "10am", calls: 45 },
-  { hour: "11am", calls: 52 },
-  { hour: "12pm", calls: 38 },
-  { hour: "1pm",  calls: 41 },
-  { hour: "2pm",  calls: 49 },
-  { hour: "3pm",  calls: 56 },
-  { hour: "4pm",  calls: 48 },
-  { hour: "5pm",  calls: 33 },
-  { hour: "6pm",  calls: 19 },
-];
-
-const serviceBreakdown = [
-  { name: "Botox / Injectables", value: 45, color: "#48C4C6" },
-  { name: "Massage & Body",       value: 28, color: "#8952A5" },
-  { name: "Facials & Skin",       value: 18, color: "#60A5FA" },
-  { name: "General Inquiries",    value: 9,  color: "#F59E0B" },
-];
-
-const topServices = [
-  { name: "Botox Consultations", calls: 312, bookings: 178, rate: 57 },
-  { name: "Hydrafacial",         calls: 198, bookings: 102, rate: 51 },
-  { name: "Massage Therapy",     calls: 245, bookings: 118, rate: 48 },
-  { name: "Microneedling",       calls: 156, bookings: 69,  rate: 44 },
-  { name: "General Inquiry",     calls: 256, bookings: 34,  rate: 13 },
-];
+function buildKpis(metrics: DashboardMetrics): KpiData[] {
+  return [
+    {
+      label: "Total Calls",
+      value: metrics.totalCalls.toLocaleString(),
+      trend: metrics.trends.totalCalls,
+      icon: Phone, iconBg: "var(--teal-surface)", iconColor: "var(--teal)",
+    },
+    {
+      label: "Bookings Made",
+      value: metrics.bookingsMade.toLocaleString(),
+      trend: metrics.trends.bookingsMade,
+      icon: CalendarCheck2, iconBg: "var(--purple-surface)", iconColor: "var(--purple)",
+    },
+    {
+      label: "Conversion Rate",
+      value: `${metrics.conversionRatePct.toFixed(1)}%`,
+      trend: metrics.trends.conversionRate,
+      icon: Percent, iconBg: "var(--info-surface)", iconColor: "var(--info-text)",
+    },
+    {
+      label: "Avg Handle Time",
+      value: metrics.avgHandleTimeLabel,
+      trend: metrics.trends.avgHandleTime,
+      icon: Timer, iconBg: "var(--success-surface)", iconColor: "var(--success-text)",
+    },
+  ];
+}
 
 /* ─── StatCard ──────────────────────────────────────────────────── */
 function StatCard({ label, value, trend, icon: Icon, iconBg, iconColor }: KpiData) {
@@ -151,11 +120,69 @@ function chartTooltipStyle() {
   };
 }
 
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 py-10 text-center">
+      <Inbox size={20} style={{ color: "var(--text-placeholder)" }} aria-hidden="true" />
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+    </div>
+  );
+}
+
 /* ─── Main Panel ────────────────────────────────────────────────── */
-export default function AnalyticsPanel() {
+export default function AnalyticsPanel({ clinicId }: { clinicId?: string }) {
   const [range, setRange] = useState<Range>("7D");
-  const volume = volumeByRange[range];
-  const kpis = kpisByRange[range];
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMetrics = useCallback(async (id: string, r: Range) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/dashboard/metrics?clinicId=${encodeURIComponent(id)}&range=${r}`);
+      if (!res.ok) {
+        setError("Could not load analytics right now. Please try again.");
+        return;
+      }
+      const json = await res.json();
+      setMetrics(json);
+    } catch {
+      setError("Could not load analytics right now. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!clinicId) {
+      setLoading(false);
+      return;
+    }
+    fetchMetrics(clinicId, range);
+  }, [clinicId, range, fetchMetrics]);
+
+  if (!clinicId) {
+    return (
+      <div className="card p-10 flex flex-col items-center justify-center text-center gap-2">
+        <Inbox size={28} style={{ color: "var(--text-placeholder)" }} aria-hidden="true" />
+        <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>No clinic linked to this account yet</p>
+        <p className="text-xs max-w-sm" style={{ color: "var(--text-muted)" }}>
+          Once your account is linked to a clinic, analytics for your AI receptionist calls will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  const kpis = metrics ? buildKpis(metrics) : [];
+  const volume = metrics?.volume ?? [];
+  const peakHoursData = metrics?.peakHours ?? [];
+  const serviceBreakdown = (metrics?.serviceBreakdown ?? []).map((s, i) => ({
+    name: s.name,
+    value: s.value,
+    color: SERVICE_COLORS[i % SERVICE_COLORS.length],
+  }));
+  const topServices = metrics?.topServices ?? [];
 
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="flex flex-col gap-4">
@@ -183,138 +210,168 @@ export default function AnalyticsPanel() {
         </div>
       </motion.div>
 
-      {/* KPI row */}
-      <motion.div variants={itemV} className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {kpis.map((kpi) => <StatCard key={kpi.label} {...kpi} />)}
-      </motion.div>
+      {error && (
+        <motion.div variants={itemV} className="card p-4 text-xs" style={{ background: "var(--error-surface)", color: "var(--error-text)" }}>
+          {error}
+        </motion.div>
+      )}
 
-      {/* Call volume trend */}
-      <motion.section variants={itemV} className="card p-4 md:p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
-              <Activity size={14} style={{ color: "var(--teal)" }} aria-hidden="true" />
-            </div>
-            <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Calls vs Bookings</h3>
-          </div>
-          <div className="flex items-center gap-3 text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#48C4C6" }} aria-hidden="true" />Calls</span>
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#8952A5" }} aria-hidden="true" />Bookings</span>
-          </div>
-        </div>
-        <div className="w-full h-56" role="img" aria-label="Calls versus bookings over time">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={volume} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
-              <defs>
-                <linearGradient id="callsFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#48C4C6" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="#48C4C6" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="bookingsFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8952A5" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="#8952A5" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={36} />
-              <Tooltip
-                contentStyle={chartTooltipStyle()}
-                labelStyle={{ color: "var(--text-primary)", fontWeight: 600, marginBottom: 4 }}
-                cursor={{ stroke: "var(--border-medium)", strokeWidth: 1 }}
-              />
-              <Area type="monotone" dataKey="calls" name="Calls" stroke="#48C4C6" strokeWidth={2.5} fill="url(#callsFill)" />
-              <Area type="monotone" dataKey="bookings" name="Bookings" stroke="#8952A5" strokeWidth={2.5} fill="url(#bookingsFill)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </motion.section>
+      {loading ? (
+        <motion.div variants={itemV} className="card p-16 flex items-center justify-center">
+          <Loader2 size={22} className="animate-spin" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+        </motion.div>
+      ) : (
+        <>
+          {/* KPI row */}
+          <motion.div variants={itemV} className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            {kpis.map((kpi) => <StatCard key={kpi.label} {...kpi} />)}
+          </motion.div>
 
-      {/* Peak hours + Service breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <motion.section variants={itemV} className="card p-4 md:p-5">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--purple-surface)" }}>
-              <Activity size={14} style={{ color: "var(--purple)" }} aria-hidden="true" />
-            </div>
-            <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Peak Call Hours</h3>
-          </div>
-          <div className="w-full h-48" role="img" aria-label="Call volume by hour of day">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={peakHoursData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-                <XAxis dataKey="hour" tick={{ fill: "var(--text-muted)", fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
-                <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={32} />
-                <Tooltip contentStyle={chartTooltipStyle()} labelStyle={{ color: "var(--text-primary)", fontWeight: 600 }} cursor={{ fill: "var(--bg-sunken)" }} />
-                <Bar dataKey="calls" name="Calls" fill="#48C4C6" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.section>
-
-        <motion.section variants={itemV} className="card p-4 md:p-5">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--info-surface)" }}>
-              <PieChartIcon size={14} style={{ color: "var(--info-text)" }} aria-hidden="true" />
-            </div>
-            <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Service Breakdown</h3>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="w-28 h-28 flex-shrink-0" role="img" aria-label="Service breakdown by percentage">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={serviceBreakdown} dataKey="value" innerRadius="58%" outerRadius="95%" startAngle={90} endAngle={-270} stroke="none" cornerRadius={4}>
-                    {serviceBreakdown.map((s) => <Cell key={s.name} fill={s.color} />)}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <ul className="flex-1 space-y-2" role="list">
-              {serviceBreakdown.map((s) => (
-                <li key={s.name} className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-xs min-w-0" style={{ color: "var(--text-secondary)" }}>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} aria-hidden="true" />
-                    <span className="truncate">{s.name}</span>
-                  </span>
-                  <span className="text-xs font-bold flex-shrink-0" style={{ color: "var(--text-primary)" }}>{s.value}%</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </motion.section>
-      </div>
-
-      {/* Top services conversion leaderboard */}
-      <motion.section variants={itemV} className="card p-4 md:p-5">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
-            <ListOrdered size={14} style={{ color: "var(--teal)" }} aria-hidden="true" />
-          </div>
-          <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Conversion by Service</h3>
-        </div>
-        <ul className="space-y-3" role="list">
-          {topServices.map((s) => (
-            <li key={s.name}>
-              <div className="flex justify-between items-baseline mb-1 gap-2">
-                <span className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{s.name}</span>
-                <span className="text-[11px] flex-shrink-0" style={{ color: "var(--text-muted)" }}>
-                  {s.bookings}/{s.calls} calls
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
-                  role="progressbar" aria-valuenow={s.rate} aria-valuemin={0} aria-valuemax={100}
-                  aria-label={`${s.name} conversion rate`}>
-                  <motion.div className="h-full rounded-full" style={{ background: "#48C4C6" }}
-                    initial={{ width: 0 }} animate={{ width: `${s.rate}%` }}
-                    transition={{ duration: 0.7, ease: "easeOut" }} />
+          {/* Call volume trend */}
+          <motion.section variants={itemV} className="card p-4 md:p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
+                  <Activity size={14} style={{ color: "var(--teal)" }} aria-hidden="true" />
                 </div>
-                <span className="text-xs font-bold w-10 text-right flex-shrink-0" style={{ color: "var(--teal-text)" }}>{s.rate}%</span>
+                <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Calls vs Bookings</h3>
               </div>
-            </li>
-          ))}
-        </ul>
-      </motion.section>
+              <div className="flex items-center gap-3 text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#48C4C6" }} aria-hidden="true" />Calls</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#8952A5" }} aria-hidden="true" />Bookings</span>
+              </div>
+            </div>
+            {volume.length === 0 ? (
+              <EmptyState label="No call activity in this range yet" />
+            ) : (
+              <div className="w-full h-56" role="img" aria-label="Calls versus bookings over time">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={volume} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
+                    <defs>
+                      <linearGradient id="callsFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#48C4C6" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#48C4C6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="bookingsFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#8952A5" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#8952A5" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={36} />
+                    <Tooltip
+                      contentStyle={chartTooltipStyle()}
+                      labelStyle={{ color: "var(--text-primary)", fontWeight: 600, marginBottom: 4 }}
+                      cursor={{ stroke: "var(--border-medium)", strokeWidth: 1 }}
+                    />
+                    <Area type="monotone" dataKey="calls" name="Calls" stroke="#48C4C6" strokeWidth={2.5} fill="url(#callsFill)" />
+                    <Area type="monotone" dataKey="bookings" name="Bookings" stroke="#8952A5" strokeWidth={2.5} fill="url(#bookingsFill)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </motion.section>
+
+          {/* Peak hours + Service breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <motion.section variants={itemV} className="card p-4 md:p-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--purple-surface)" }}>
+                  <Activity size={14} style={{ color: "var(--purple)" }} aria-hidden="true" />
+                </div>
+                <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Peak Call Hours</h3>
+              </div>
+              {peakHoursData.length === 0 ? (
+                <EmptyState label="No calls in this range yet" />
+              ) : (
+                <div className="w-full h-48" role="img" aria-label="Call volume by hour of day">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={peakHoursData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+                      <XAxis dataKey="hour" tick={{ fill: "var(--text-muted)", fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
+                      <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+                      <Tooltip contentStyle={chartTooltipStyle()} labelStyle={{ color: "var(--text-primary)", fontWeight: 600 }} cursor={{ fill: "var(--bg-sunken)" }} />
+                      <Bar dataKey="calls" name="Calls" fill="#48C4C6" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </motion.section>
+
+            <motion.section variants={itemV} className="card p-4 md:p-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--info-surface)" }}>
+                  <PieChartIcon size={14} style={{ color: "var(--info-text)" }} aria-hidden="true" />
+                </div>
+                <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Service Breakdown</h3>
+              </div>
+              {serviceBreakdown.length === 0 ? (
+                <EmptyState label="No calls in this range yet" />
+              ) : (
+                <div className="flex items-center gap-4">
+                  <div className="w-28 h-28 flex-shrink-0" role="img" aria-label="Service breakdown by percentage">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={serviceBreakdown} dataKey="value" innerRadius="58%" outerRadius="95%" startAngle={90} endAngle={-270} stroke="none" cornerRadius={4}>
+                          {serviceBreakdown.map((s) => <Cell key={s.name} fill={s.color} />)}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <ul className="flex-1 space-y-2" role="list">
+                    {serviceBreakdown.map((s) => (
+                      <li key={s.name} className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2 text-xs min-w-0" style={{ color: "var(--text-secondary)" }}>
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} aria-hidden="true" />
+                          <span className="truncate">{s.name}</span>
+                        </span>
+                        <span className="text-xs font-bold flex-shrink-0" style={{ color: "var(--text-primary)" }}>{s.value}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </motion.section>
+          </div>
+
+          {/* Top services conversion leaderboard */}
+          <motion.section variants={itemV} className="card p-4 md:p-5">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
+                <ListOrdered size={14} style={{ color: "var(--teal)" }} aria-hidden="true" />
+              </div>
+              <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Conversion by Service</h3>
+            </div>
+            {topServices.length === 0 ? (
+              <EmptyState label="No calls in this range yet" />
+            ) : (
+              <ul className="space-y-3" role="list">
+                {topServices.map((s) => (
+                  <li key={s.name}>
+                    <div className="flex justify-between items-baseline mb-1 gap-2">
+                      <span className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{s.name}</span>
+                      <span className="text-[11px] flex-shrink-0" style={{ color: "var(--text-muted)" }}>
+                        {s.bookings}/{s.calls} calls
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
+                        role="progressbar" aria-valuenow={s.rate} aria-valuemin={0} aria-valuemax={100}
+                        aria-label={`${s.name} conversion rate`}>
+                        <motion.div className="h-full rounded-full" style={{ background: "#48C4C6" }}
+                          initial={{ width: 0 }} animate={{ width: `${s.rate}%` }}
+                          transition={{ duration: 0.7, ease: "easeOut" }} />
+                      </div>
+                      <span className="text-xs font-bold w-10 text-right flex-shrink-0" style={{ color: "var(--teal-text)" }}>{s.rate}%</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </motion.section>
+        </>
+      )}
     </motion.div>
   );
 }
