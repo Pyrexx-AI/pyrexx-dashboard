@@ -1,12 +1,14 @@
-// src/components/ProfilePanel.tsx
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
 import { motion, type Variants } from "framer-motion";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Building2, Bot, Users, CreditCard, Bell,
   Calendar, MapPin, Phone, Globe, Clock,
-  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2,
+  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2, Shield,
+  AlertCircle, Mail
 } from "lucide-react";
 import Switch from "./ui/Switch";
 import { createClient } from "@/lib/supabase/client";
@@ -16,20 +18,29 @@ import type { Database as DB } from "@/types/database";
 type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
 type Profile = DB["public"]["Tables"]["profiles"]["Row"];
 
-/* ─── Variants ──────────────────────────────────────────────────── */
 const containerV: Variants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.06, ease: "easeOut" } },
+  show: { opacity: 1, transition: { staggerChildren: 0.05, ease: "easeOut" } },
 };
 const itemV: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 26 } },
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } },
 };
 
-/* ─── Section wrapper ───────────────────────────────────────────── */
-function Section({ icon: Icon, iconBg, iconColor, title, action, children }: {
-  icon: React.ElementType; iconBg: string; iconColor: string; title: string;
-  action?: React.ReactNode; children: React.ReactNode;
+function Section({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  title,
+  action,
+  children,
+}: {
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
@@ -47,7 +58,6 @@ function Section({ icon: Icon, iconBg, iconColor, title, action, children }: {
   );
 }
 
-/* ─── Small "edit" button used in section headers ───────────────── */
 function EditButton({ label }: { label: string }) {
   return (
     <button
@@ -61,19 +71,30 @@ function EditButton({ label }: { label: string }) {
   );
 }
 
-/* ─── Main Panel ────────────────────────────────────────────────── */
-export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
+export interface ProfilePanelProps {
+  clinicId?: string;
+  isAdmin?: boolean;
+  isInspectionMode?: boolean;
+  userEmail?: string;
+}
+
+export default function ProfilePanel({
+  clinicId,
+  isAdmin = false,
+  isInspectionMode = false,
+  userEmail,
+}: ProfilePanelProps) {
+  const router = useRouter();
   const [prefs, setPrefs] = useState({
     dailyDigest: true,
     missedCallSms: true,
     newBookingPush: true,
     weeklyReport: false,
   });
-  
+
   const [isPending, startTransition] = useTransition();
   const [billingError, setBillingError] = useState<string | null>(null);
 
-  // Database State
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [team, setTeam] = useState<Profile[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -87,7 +108,7 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     async function fetchData(id: string) {
       setLoadingData(true);
       const supabase = createClient();
-      
+
       const [clinicRes, teamRes] = await Promise.all([
         supabase.from("clinics").select("*").eq("id", id).single(),
         supabase.from("profiles").select("*").eq("clinic_id", id),
@@ -95,7 +116,7 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
 
       if (clinicRes.data) setClinic(clinicRes.data);
       if (teamRes.data) setTeam(teamRes.data);
-      
+
       setLoadingData(false);
     }
 
@@ -105,12 +126,9 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
   const togglePref = (key: keyof typeof prefs) =>
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
-  /**
-   * Opens Dodo's hosted checkout for this clinic's active plan.
-   */
   function handleManageBilling() {
     if (!clinicId) {
-      setBillingError("Billing isn't available yet — clinic context missing.");
+      setBillingError("Billing is not available — missing clinic context.");
       return;
     }
     setBillingError(null);
@@ -130,44 +148,98 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
     });
   }
 
-  // Show a loading skeleton/spinner while fetching real data
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
   if (loadingData) {
     return (
       <div className="w-full h-64 flex flex-col items-center justify-center gap-3">
         <Loader2 size={28} className="animate-spin" style={{ color: "var(--teal)" }} />
-        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Loading profile data...</p>
+        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Loading clinic profile data...</p>
       </div>
     );
   }
 
-  // Admins (and any account with no clinic_id) have nothing to show
-  // here — this panel is clinic-scoped. Admins manage clients from /admin.
-  if (!clinicId) {
+  // STATE 1: Verified Admin without an active inspected clinic
+  if (isAdmin && !clinicId) {
     return (
-      <div className="w-full flex flex-col items-center justify-center gap-3 py-20 text-center">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "var(--info-surface)" }}>
-          <Building2 size={20} style={{ color: "var(--info-text)" }} aria-hidden="true" />
+      <div className="w-full flex flex-col items-center justify-center gap-4 py-16 text-center card p-8">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
+          <Shield size={24} style={{ color: "var(--teal)" }} aria-hidden="true" />
         </div>
         <div>
-          <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>No clinic profile to show</p>
-          <p className="text-xs mt-1 max-w-xs" style={{ color: "var(--text-muted)" }}>
-            Admin accounts aren't tied to a single clinic. Manage client clinics from the admin dashboard.
+          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Executive Administrator Mode</h3>
+          <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-muted)" }}>
+            Your account has executive administrator privileges across Pyrexx AI. Manage client clinics, view MRR, and configure integrations in the Command Center.
           </p>
         </div>
-        <a href="/admin" className="text-xs font-semibold mt-1" style={{ color: "var(--teal-text)" }}>
-          Go to Admin Dashboard →
-        </a>
+        <div className="flex gap-3 mt-2">
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-md"
+            style={{ background: "var(--teal)", color: "#fff" }}
+          >
+            Open Admin Command Center &rarr;
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
     );
   }
 
-  /* ─── Dynamic Data Mapping ────────────────────────────────────── */
+  // STATE 2: Unlinked or Orphaned Account (Neither admin nor attached to a clinic)
+  if (!clinicId) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center gap-4 py-16 text-center card p-8">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--warning-surface)" }}>
+          <AlertCircle size={24} style={{ color: "var(--warning-text)" }} aria-hidden="true" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Account Setup in Progress</h3>
+          <p className="text-xs mt-1 max-w-md leading-relaxed" style={{ color: "var(--text-muted)" }}>
+            Your account is authenticated ({userEmail || "on file"}), but has not yet been linked to an active clinic workspace.
+            Our setup team is currently provisioning your AI Receptionist agent.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 mt-2">
+          <a
+            href="mailto:hello@pyrexxai.com"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{ background: "var(--teal)", color: "#fff" }}
+          >
+            <Mail size={15} /> Contact Support
+          </a>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // STATE 3: Active Clinic Workspace
   const clinicInfo = {
     name: clinic?.name || "Unknown Clinic",
-    address: "Address not set", 
+    address: "Location on File",
     phone: clinic?.phone_number || "—",
     website: clinic?.website || "—",
-    timezone: "Eastern Time (ET)", 
+    timezone: "Eastern Time (ET)",
     initials: (clinic?.name || "C")
       .split(" ")
       .map((n) => n[0])
@@ -204,41 +276,40 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
   const currentPlanDefinition = clinic?.plan_tier ? getPlan(clinic.plan_tier) : null;
   const plan = {
     name: currentPlanDefinition?.name || "AI Receptionist Plan",
-    price: clinic?.plan_price_cents 
-      ? `$${(clinic.plan_price_cents / 100).toLocaleString()}/month` 
-      : (currentPlanDefinition?.priceLabel || "TBD"),
-    renewal: "TBD", // Handled dynamically once billing is active
+    price: clinic?.plan_price_cents
+      ? `$${(clinic.plan_price_cents / 100).toLocaleString()}/month`
+      : currentPlanDefinition?.priceLabel || "TBD",
+    renewal: "Active Monthly",
     minutesUsed: 0,
     minutesIncluded: 2500,
   };
-  
+
   const isSubActive = clinic?.subscription_status === "active";
   const usagePct = Math.round((plan.minutesUsed / plan.minutesIncluded) * 100);
 
   const integrations = [
-    { 
-      name: "AI Receptionist Agent", 
-      desc: "Powers your AI receptionist calls", 
-      status: clinic?.agent_id ? "connected" : "not_connected", 
-      icon: Bot 
+    {
+      name: "AI Receptionist Agent",
+      desc: "Powers your AI receptionist calls",
+      status: clinic?.agent_id ? "connected" : "not_connected",
+      icon: Bot,
     },
-    { 
-      name: "Google Calendar",        
-      desc: "Syncs bookings in real time",       
-      status: "not_connected", 
-      icon: Calendar 
+    {
+      name: "Google Calendar",
+      desc: "Syncs bookings in real time",
+      status: "not_connected",
+      icon: Calendar,
     },
-    { 
-      name: `CRM (${clinic?.crm_provider && clinic.crm_provider !== 'none' ? clinic.crm_provider.toUpperCase() : 'None'})`, 
-      desc: "Sync patient records & call logs",  
-      status: clinic?.crm_provider && clinic.crm_provider !== 'none' ? "connected" : "not_connected", 
-      icon: Database 
+    {
+      name: `CRM (${clinic?.crm_provider && clinic.crm_provider !== "none" ? clinic.crm_provider.toUpperCase() : "None"})`,
+      desc: "Sync patient records & call logs",
+      status: clinic?.crm_provider && clinic.crm_provider !== "none" ? "connected" : "not_connected",
+      icon: Database,
     },
   ];
 
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="flex flex-col gap-4">
-      {/* Header */}
       <motion.div variants={itemV}>
         <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Profile &amp; Settings</h2>
         <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -247,12 +318,15 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* ── Main column ─────────────────────────────────────── */}
+        {/* Main Column */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-
-          {/* Clinic info */}
-          <Section icon={Building2} iconBg="var(--teal-surface)" iconColor="var(--teal)"
-            title="Clinic Profile" action={<EditButton label="Edit clinic profile" />}>
+          <Section
+            icon={Building2}
+            iconBg="var(--teal-surface)"
+            iconColor="var(--teal)"
+            title="Clinic Profile"
+            action={<EditButton label="Edit clinic profile" />}
+          >
             <div className="flex items-start gap-4">
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-extrabold flex-shrink-0"
@@ -285,9 +359,13 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             </div>
           </Section>
 
-          {/* AI Receptionist settings */}
-          <Section icon={Bot} iconBg="var(--purple-surface)" iconColor="var(--purple)"
-            title="AI Receptionist" action={<EditButton label="Edit AI receptionist settings" />}>
+          <Section
+            icon={Bot}
+            iconBg="var(--purple-surface)"
+            iconColor="var(--purple)"
+            title="AI Receptionist"
+            action={<EditButton label="Edit AI receptionist settings" />}
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div>
@@ -312,34 +390,47 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Greeting Script</p>
-                <div className="rounded-2xl p-3 text-xs italic leading-relaxed"
-                  style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+                <div
+                  className="rounded-2xl p-3 text-xs italic leading-relaxed"
+                  style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
+                >
                   "{aiSettings.greeting}"
                 </div>
               </div>
             </div>
           </Section>
 
-          {/* Team members */}
-          <Section icon={Users} iconBg="var(--info-surface)" iconColor="var(--info-text)"
+          <Section
+            icon={Users}
+            iconBg="var(--info-surface)"
+            iconColor="var(--info-text)"
             title="Team Members"
             action={
-              <button type="button" aria-label="Invite team member"
+              <button
+                type="button"
+                aria-label="Invite team member"
                 className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
-                style={{ color: "var(--info-text)", background: "var(--info-surface)" }}>
+                style={{ color: "var(--info-text)", background: "var(--info-surface)" }}
+              >
                 <UserPlus size={11} aria-hidden="true" /> Invite
               </button>
-            }>
+            }
+          >
             <ul className="space-y-3" role="list">
               {mappedTeamMembers.map((m) => (
                 <li key={m.name + m.role} className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                    style={{ background: m.color }} aria-hidden="true">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                    style={{ background: m.color }}
+                    aria-hidden="true"
+                  >
                     {m.initials}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{m.name}</p>
-                    <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{m.role} {m.email !== "—" && `· ${m.email}`}</p>
+                    <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
+                      {m.role} {m.email !== "—" && `· ${m.email}`}
+                    </p>
                   </div>
                 </li>
               ))}
@@ -347,20 +438,21 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
           </Section>
         </div>
 
-        {/* ── Sidebar column ──────────────────────────────────── */}
+        {/* Sidebar Column */}
         <div className="flex flex-col gap-4">
-
-          {/* Plan / billing */}
           <Section icon={CreditCard} iconBg="var(--success-surface)" iconColor="var(--success-text)" title="Subscription">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{plan.name}</p>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{plan.price} · renews {plan.renewal}</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{plan.price} · {plan.renewal}</p>
               </div>
-              <span className="badge text-[10px]" style={{ 
-                background: isSubActive ? "var(--success-surface)" : "var(--warning-surface)", 
-                color: isSubActive ? "var(--success-text)" : "var(--warning-text)" 
-              }}>
+              <span
+                className="badge text-[10px]"
+                style={{
+                  background: isSubActive ? "var(--success-surface)" : "var(--warning-surface)",
+                  color: isSubActive ? "var(--success-text)" : "var(--warning-text)",
+                }}
+              >
                 {isSubActive ? <CheckCircle2 size={10} aria-hidden="true" /> : <Clock size={10} aria-hidden="true" />}
                 {isSubActive ? "Active" : "Pending Setup"}
               </span>
@@ -372,15 +464,31 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
                   {plan.minutesUsed.toLocaleString()} / {plan.minutesIncluded.toLocaleString()}
                 </span>
               </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
-                role="progressbar" aria-valuenow={usagePct} aria-valuemin={0} aria-valuemax={100} aria-label="Call minutes used this period">
-                <motion.div className="h-full rounded-full" style={{ background: "var(--teal)" }}
-                  initial={{ width: 0 }} animate={{ width: `${usagePct}%` }} transition={{ duration: 0.7, ease: "easeOut" }} />
+              <div
+                className="h-1.5 rounded-full overflow-hidden"
+                style={{ background: "var(--bg-sunken)" }}
+                role="progressbar"
+                aria-valuenow={usagePct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Call minutes used this period"
+              >
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: "var(--teal)" }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${usagePct}%` }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                />
               </div>
             </div>
-            <button type="button" onClick={handleManageBilling} disabled={isPending}
-              className="w-full mt-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
-              style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
+            <button
+              type="button"
+              onClick={handleManageBilling}
+              disabled={isPending}
+              className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
+              style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+            >
               {isPending && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
               {isPending ? "Opening billing…" : "Manage Billing"}
             </button>
@@ -389,7 +497,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             )}
           </Section>
 
-          {/* Integrations */}
           <Section icon={Database} iconBg="var(--teal-surface)" iconColor="var(--teal)" title="Integrations">
             <ul className="space-y-3" role="list">
               {integrations.map((i) => {
@@ -397,8 +504,10 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
                 const connected = i.status === "connected";
                 return (
                   <li key={i.name} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: connected ? "var(--teal-surface)" : "var(--bg-sunken)" }}>
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: connected ? "var(--teal-surface)" : "var(--bg-sunken)" }}
+                    >
                       <Icon size={14} style={{ color: connected ? "var(--teal)" : "var(--text-muted)" }} aria-hidden="true" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -410,9 +519,12 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
                         <CheckCircle2 size={9} aria-hidden="true" /> Connected
                       </span>
                     ) : (
-                      <button type="button" aria-label={`Connect ${i.name}`}
+                      <button
+                        type="button"
+                        aria-label={`Connect ${i.name}`}
                         className="text-[10px] font-bold flex-shrink-0 cursor-pointer rounded-lg px-2 py-1 transition-colors"
-                        style={{ color: "var(--purple-text)", background: "var(--purple-surface)" }}>
+                        style={{ color: "var(--purple-text)", background: "var(--purple-surface)" }}
+                      >
                         Connect
                       </button>
                     )}
@@ -422,7 +534,6 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
             </ul>
           </Section>
 
-          {/* Notification preferences */}
           <Section icon={Bell} iconBg="var(--warning-surface)" iconColor="var(--warning-text)" title="Notifications">
             <ul className="space-y-3" role="list">
               <li className="flex items-center justify-between gap-3">
@@ -446,34 +557,26 @@ export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
                 </div>
                 <Switch checked={prefs.newBookingPush} onChange={() => togglePref("newBookingPush")} label="New booking push notifications" />
               </li>
-              <li className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>Weekly performance report</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Sent every Monday</p>
-                </div>
-                <Switch checked={prefs.weeklyReport} onChange={() => togglePref("weeklyReport")} label="Weekly performance report" />
-              </li>
             </ul>
           </Section>
 
-          {/* Account actions */}
-          <motion.div variants={itemV} className="flex gap-2">
-            <button type="button"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
-              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
-              <Download size={13} aria-hidden="true" /> Export Data
-            </button>
-            <button type="button"
+          <div className="flex gap-2">
+            <button
+              type="button"
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
               style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
-              onClick={async () => {
-                const supabase = createClient();
-                await supabase.auth.signOut();
-                window.location.href = '/login';
-              }}>
+            >
+              <Download size={13} aria-hidden="true" /> Export Data
+            </button>
+            <button
+              type="button"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
+              onClick={handleSignOut}
+            >
               <LogOut size={13} aria-hidden="true" /> Sign Out
             </button>
-          </motion.div>
+          </div>
         </div>
       </div>
     </motion.div>

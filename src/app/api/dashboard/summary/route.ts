@@ -1,34 +1,11 @@
-/**
- * GET /api/dashboard/summary?clinicId=...
- * ───────────────────────────────────────────────────────────────
- * Reads from `callRecordStore` (populated by /api/webhooks/retell)
- * and returns data shaped for DashboardHome's three list cards:
- * Recent Calls, Recently Booked, Upcoming.
- *
- * This is the seam where mock data (DashboardHome.tsx's
- * `recentCalls` / `recentlyBooked` / `upcomingBookings` arrays)
- * gets replaced with live Retell data. To wire it up:
- *
- *   1. In DashboardHome.tsx, replace the hardcoded arrays with a
- *      fetch to this endpoint (e.g. via SWR or a server component).
- *   2. Map CallRecord → Meeting (see lib/retell/types.ts —
- *      the two shapes are intentionally close).
- *
- * AUTH NOTE: This route currently trusts a `clinicId` query param.
- * In production, derive clinicId from the authenticated session
- * (e.g. NextAuth/Clerk) instead of accepting it as client input —
- * otherwise any clinic could read another clinic's call data by
- * changing the query string.
- */
-
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { callRecordStore } from "@/lib/retell/store";
 import type { CallRecord } from "@/lib/retell/types";
 
-/** CallRecord → Meeting (matches components/MeetingModal.tsx) */
 function toMeeting(record: CallRecord, idx: number) {
   return {
-    id: idx + 1, // Meeting.id is numeric in the current UI; swap to string IDs if refactoring
+    id: idx + 1,
     name: record.patientName,
     type: record.serviceType,
     time: record.bookingTime
@@ -49,10 +26,30 @@ function toMeeting(record: CallRecord, idx: number) {
 }
 
 export async function GET(req: NextRequest) {
-  const clinicId = req.nextUrl.searchParams.get("clinicId");
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const clinicId = req.nextUrl.searchParams.get("clinicId");
   if (!clinicId) {
     return NextResponse.json({ error: "Missing clinicId" }, { status: 400 });
+  }
+
+  // Authorization Check: Verify caller is Admin OR owns the requested clinic
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, clinic_id")
+    .eq("id", user.id)
+    .single();
+
+  const isAdmin = profile?.role === "admin";
+  const isOwnClinic = profile?.clinic_id === clinicId;
+
+  if (!isAdmin && !isOwnClinic) {
+    return NextResponse.json({ error: "Forbidden: You cannot access another clinic's call records." }, { status: 403 });
   }
 
   const [recent, confirmed, scheduled] = await Promise.all([

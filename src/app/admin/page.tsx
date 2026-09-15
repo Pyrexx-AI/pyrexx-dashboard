@@ -1,44 +1,37 @@
-import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import ClientSetupForm from "@/components/admin/ClientSetupForm";
+import { createAdminClient } from "@/lib/supabase/server";
+import AdminDashboardClient from "@/components/admin/AdminDashboardClient";
+import type { Database } from "@/types/database";
 
-export const metadata = { title: "Client Setup | Pyrexx Admin" };
+export const metadata = { title: "Admin Dashboard | Pyrexx" };
 
-export default async function AdminClientDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const supabase = await createClient();
+type Clinic = Database["public"]["Tables"]["clinics"]["Row"];
 
-  const { data: clinic } = await supabase
+export default async function AdminDashboardPage() {
+  // Use Service Role client to bypass RLS failures on admin queries
+  const supabase = createAdminClient();
+  
+  const { data: clinics, error } = await supabase
     .from("clinics")
     .select("*")
-    .eq("id", id)
-    .single();
+    .order("created_at", { ascending: false });
 
-  if (!clinic) notFound();
+  if (error) {
+    console.error("Admin dashboard fetch error:", error);
+  }
 
-  // Integration credentials are admin-only (RLS enforces this), so
-  // this select is safe — but only ever surface them on this admin
-  // page, never pass them to a client-facing component/route.
-  const { data: credentials } = await supabase
-    .from("integration_credentials")
-    .select("*")
-    .eq("clinic_id", id);
+  const allClinics = (clinics ?? []) as Clinic[];
 
-  const crmCredential = credentials?.find((c) => c.provider === "crm") ?? null;
+  // Metrics Calculation
+  const activeClinics = allClinics.filter(c => c.subscription_status === 'active');
+  const needsSetup = allClinics.filter(c => c.status === 'onboarding' || c.status === 'pending_setup');
+  
+  const mrrCents = activeClinics.reduce((acc, curr) => acc + (curr.plan_price_cents || 0), 0);
+  const mrr = `$${(mrrCents / 100).toLocaleString()}`;
 
   return (
-    <div className="flex flex-col gap-5 max-w-3xl mx-auto">
-      <Link href="/admin" className="flex items-center gap-1.5 text-xs font-semibold w-fit" style={{ color: "var(--text-muted)" }}>
-        <ArrowLeft size={13} aria-hidden="true" /> Back to clients
-      </Link>
-
-      <ClientSetupForm clinic={clinic} crmCredential={crmCredential} />
-    </div>
+    <AdminDashboardClient 
+      clinics={allClinics} 
+      metrics={{ total: allClinics.length, active: activeClinics.length, needsSetup: needsSetup.length, mrr }}
+    />
   );
 }

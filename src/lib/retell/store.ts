@@ -1,39 +1,4 @@
-/**
- * Call Record Store — storage abstraction
- * ───────────────────────────────────────────────────────────────
- * The webhook handler and dashboard data-fetching code depend on
- * this interface, not on a specific database. Swap the in-memory
- * implementation below for Postgres / Supabase / PlanetScale /
- * Prisma etc. without touching the webhook route or UI components.
- *
- * SUGGESTED PRODUCTION SCHEMA (Postgres):
- *
- *   create table call_records (
- *     id                 text primary key,        -- Retell call_id
- *     clinic_id          text not null,
- *     patient_name       text not null default 'Unknown Caller',
- *     service_type       text not null default 'General Inquiry',
- *     status             text not null,           -- Completed | Scheduled | Confirmed | Escalated
- *     outcome            text,                     -- booked | callback_requested | escalated | no_action
- *     started_at         timestamptz not null,
- *     duration_ms        integer,
- *     transcript         text,
- *     transcript_preview text,
- *     booking_time       timestamptz,
- *     recording_url      text,
- *     raw_payload        jsonb,                   -- full Retell payload for debugging/reprocessing
- *     created_at         timestamptz not null default now(),
- *     updated_at         timestamptz not null default now()
- *   );
- *
- *   create index on call_records (clinic_id, started_at desc);
- *
- * Each webhook event (call_started → call_ended → call_analyzed)
- * carries the same call_id, so `upsert` is the correct operation —
- * call_started creates the row, call_ended fills in duration/transcript,
- * call_analyzed fills in outcome/summary.
- */
-
+import { createAdminClient } from "@/lib/supabase/server";
 import type { CallRecord } from "./types";
 
 export interface CallRecordStore {
@@ -44,45 +9,98 @@ export interface CallRecordStore {
 }
 
 /**
- * In-memory store — for local development only.
- * Data is lost on every server restart / redeploy. Replace with a
- * real database adapter before going to production (see schema above).
+ * Real Supabase implementation.
+ * Used by webhooks to permanently store Retell call data.
  */
-class InMemoryCallRecordStore implements CallRecordStore {
-  private records = new Map<string, CallRecord>();
-
+class SupabaseCallRecordStore implements CallRecordStore {
+  
   async upsert(record: CallRecord): Promise<void> {
-    const existing = this.records.get(record.id);
-    this.records.set(record.id, { ...existing, ...record });
+    // Admin client bypasses RLS, ensuring webhooks can always write.
+    const supabase = createAdminClient();
+    
+    // Map TS camelCase to Postgres snake_case
+    const dbRecord = {
+      id: record.id,
+      clinic_id: record.clinicId,
+      patient_name: record.patientName,
+      service_type: record.serviceType,
+      status: record.status,
+      outcome: record.outcome || null,
+      started_at: record.startedAt,
+      duration_ms: record.durationMs || null,
+      transcript: record.transcript || null,
+      transcript_preview: record.transcriptPreview || null,
+      booking_time: record.bookingTime || null,
+      recording_url: record.recordingUrl || null,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+      .from("call_records")
+      .upsert(dbRecord, { onConflict: "id" });
+
+    if (error) {
+      console.error(`Failed to upsert CallRecord ${record.id}:`, error);
+      throw error;
+    }
   }
 
   async getRecent(clinicId: string, limit = 20): Promise<CallRecord[]> {
-    return [...this.records.values()]
-      .filter((r) => r.clinicId === clinicId)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .slice(0, limit);
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("call_records")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .order("started_at", { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return data.map(mapFromDb);
   }
 
   async getByStatus(clinicId: string, status: CallRecord["status"], limit = 20): Promise<CallRecord[]> {
-    return [...this.records.values()]
-      .filter((r) => r.clinicId === clinicId && r.status === status)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .slice(0, limit);
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("call_records")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("status", status)
+      .order("started_at", { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return data.map(mapFromDb);
   }
 
   async getById(id: string): Promise<CallRecord | null> {
-    return this.records.get(id) ?? null;
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("call_records")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error || !data) return null;
+    return mapFromDb(data);
   }
 }
 
-/**
- * Singleton instance. In a real deployment, replace this export with
- * your database-backed implementation, e.g.:
- *
- *   export const callRecordStore: CallRecordStore = new PostgresCallRecordStore(pool);
- *
- * Keeping the same `CallRecordStore` interface means
- * `src/app/api/webhooks/retell/route.ts` and any dashboard data
- * fetchers require zero changes when you make this swap.
- */
-export const callRecordStore: CallRecordStore = new InMemoryCallRecordStore();
+// Helper to map snake_case back to frontend camelCase
+function mapFromDb(row: any): CallRecord {
+  return {
+    id: row.id,
+    clinicId: row.clinic_id,
+    patientName: row.patient_name,
+    serviceType: row.service_type,
+    status: row.status,
+    outcome: row.outcome,
+    startedAt: row.started_at,
+    durationMs: row.duration_ms,
+    transcript: row.transcript,
+    transcriptPreview: row.transcript_preview,
+    bookingTime: row.booking_time,
+    recordingUrl: row.recording_url,
+  };
+}
+
+export const callRecordStore: CallRecordStore = new SupabaseCallRecordStore();
