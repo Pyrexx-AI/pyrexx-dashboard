@@ -60,7 +60,7 @@ README.md
 src/app/admin/actions.ts
 src/app/admin/clients/[id]/page.tsx
 src/app/admin/layout.tsx
-src/app/admin/New folder/page.tsx
+src/app/admin/legal/page.tsx
 src/app/admin/page.tsx
 src/app/api/admin/legal/upload/route.ts
 src/app/api/billing/checkout/route.ts
@@ -270,30 +270,6 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-</file>
-
-<file path="src/app/admin/New folder/page.tsx">
-import React from "react";
-import LegalDocManager from "@/components/admin/LegalDocManager";
-
-export const metadata = { title: "Legal Document Management | Pyrexx Admin" };
-
-export default function AdminLegalPage() {
-  return (
-    <div className="flex flex-col gap-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
-          Legal Agreement Management
-        </h1>
-        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-          Manage and upload client agreements (PDF, DOCX, TXT) rendered during the onboarding wizard.
-        </p>
-      </div>
-
-      <LegalDocManager />
-    </div>
-  );
-}
 </file>
 
 <file path="src/app/api/admin/legal/upload/route.ts">
@@ -2002,69 +1978,6 @@ export default function ThemeToggle() {
 }
 </file>
 
-<file path="src/lib/auth/admin.ts">
-import { User } from "@supabase/supabase-js";
-import { createAdminClient } from "@/lib/supabase/server";
-
-// Fallback admin emails / domains that are ALWAYS granted admin authority
-const HARDCODED_ADMIN_EMAILS = [
-  "admin@pyrexxai.com",
-  "clifford@pyrexxai.com",
-  "hello@pyrexxai.com",
-];
-
-export async function verifyAdminStatus(user: User | null): Promise<boolean> {
-  if (!user || !user.email) return false;
-
-  const email = user.email.toLowerCase().trim();
-
-  // 1. Check if email is in the admin whitelist or ends with @pyrexxai.com
-  const isEmailAdmin = 
-    HARDCODED_ADMIN_EMAILS.includes(email) || 
-    email.endsWith("@pyrexxai.com") ||
-    process.env.ADMIN_EMAIL?.toLowerCase() === email ||
-    process.env.ADMIN_EMAILS?.toLowerCase().split(",").map(e => e.trim()).includes(email);
-
-  // 2. Check Auth Metadata
-  const isMetaAdmin = 
-    user.user_metadata?.role === "admin" || 
-    user.app_metadata?.role === "admin";
-
-  if (isEmailAdmin || isMetaAdmin) {
-    // AUTO-HEAL: Ensure database public.profiles row reflects role = 'admin'
-    try {
-      const adminSupabase = createAdminClient();
-      await adminSupabase.from("profiles").upsert({
-        id: user.id,
-        role: "admin",
-        full_name: user.user_metadata?.full_name || "Administrator",
-      }, { onConflict: "id" });
-    } catch (e) {
-      console.warn("Profile auto-healing notice:", e);
-    }
-    return true;
-  }
-
-  // 3. Database Check using Service Role (Bypasses RLS)
-  try {
-    const adminSupabase = createAdminClient();
-    const { data: profile } = await adminSupabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role === "admin") {
-      return true;
-    }
-  } catch (e) {
-    // Database query failed
-  }
-
-  return false;
-}
-</file>
-
 <file path="src/lib/plans.ts">
 /**
  * Pricing Tiers — Single Source of Truth
@@ -2563,6 +2476,30 @@ export default async function AdminClientDetailPage({
       </Link>
 
       <ClientSetupForm clinic={clinic} crmCredential={crmCredential} />
+    </div>
+  );
+}
+</file>
+
+<file path="src/app/admin/legal/page.tsx">
+import React from "react";
+import LegalDocManager from "@/components/admin/LegalDocManager";
+
+export const metadata = { title: "Legal Document Management | Pyrexx Admin" };
+
+export default function AdminLegalPage() {
+  return (
+    <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+      <div>
+        <h1 className="text-xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
+          Legal Agreement Management
+        </h1>
+        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+          Manage and upload client agreements (PDF, DOCX, TXT) rendered during the onboarding wizard.
+        </p>
+      </div>
+
+      <LegalDocManager />
     </div>
   );
 }
@@ -3090,6 +3027,98 @@ export default function LogoMark({ size = 36, className = "" }: LogoMarkProps) {
       />
     </div>
   );
+}
+</file>
+
+<file path="src/lib/auth/admin.ts">
+import { User } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/server";
+
+/**
+ * Fallback administrative emails and domain that are ALWAYS granted executive privileges.
+ */
+export const HARDCODED_ADMIN_EMAILS = [
+  "admin@pyrexxai.com",
+  "clifford@pyrexxai.com",
+  "hello@pyrexxai.com",
+];
+
+/**
+ * Fast synchronous check for known admin email addresses or domain patterns.
+ */
+export function isWhitelistedAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.toLowerCase().trim();
+
+  if (HARDCODED_ADMIN_EMAILS.includes(normalized)) return true;
+  if (normalized.endsWith("@pyrexxai.com")) return true;
+
+  const envAdmin = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+  if (envAdmin && envAdmin === normalized) return true;
+
+  const envAdmins = process.env.ADMIN_EMAILS?.toLowerCase().split(",").map((e) => e.trim());
+  if (envAdmins && envAdmins.includes(normalized)) return true;
+
+  return false;
+}
+
+/**
+ * Single source of truth for verifying admin status across Next.js Server Components,
+ * Route Handlers, Server Actions, and Proxy/Middleware.
+ *
+ * Checks:
+ * 1. Hardcoded / domain whitelist / env vars
+ * 2. Secure Auth Token app_metadata (set by Supabase Admin API)
+ * 3. Database public.profiles role column via Service Role (bypassing RLS)
+ */
+export async function verifyAdminStatus(user: User | null): Promise<boolean> {
+  if (!user) return false;
+
+  const email = user.email?.toLowerCase().trim();
+
+  // 1. Email whitelist check
+  const isEmailAdmin = isWhitelistedAdminEmail(email);
+
+  // 2. Token app_metadata / user_metadata check (app_metadata is server-only and tamper-proof)
+  const isTokenAdmin =
+    user.app_metadata?.role === "admin" ||
+    user.user_metadata?.role === "admin";
+
+  if (isEmailAdmin || isTokenAdmin) {
+    // AUTO-HEAL: Ensure database public.profiles row reflects role = 'admin'
+    try {
+      const adminSupabase = createAdminClient();
+      await adminSupabase.from("profiles").upsert(
+        {
+          id: user.id,
+          role: "admin",
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name || "Administrator",
+        },
+        { onConflict: "id" }
+      );
+    } catch (autoHealErr) {
+      console.warn("[Admin Auth] Profile auto-healing notice (non-fatal):", autoHealErr);
+    }
+    return true;
+  }
+
+  // 3. Database Check using Service Role
+  try {
+    const adminSupabase = createAdminClient();
+    const { data: profile, error } = await adminSupabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!error && profile?.role === "admin") {
+      return true;
+    }
+  } catch (dbErr) {
+    console.warn("[Admin Auth] Database role lookup failed:", dbErr);
+  }
+
+  return false;
 }
 </file>
 
@@ -5168,163 +5197,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 }
 </file>
 
-<file path="src/components/auth/LoginForm.tsx">
-"use client";
-
-import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import LogoMark from "@/components/LogoMark";
-
-export default function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(signInError.message);
-      setLoading(false);
-      return;
-    }
-
-    // Check user metadata and profile role
-    const isMetadataAdmin = data.user.user_metadata?.role === "admin";
-    
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", data.user.id)
-      .single();
-
-    const isAdmin = isMetadataAdmin || profile?.role === "admin";
-    const redirect = searchParams.get("redirect");
-
-    // ADMINS ARE ALWAYS REDIRECTED TO /admin DIRECTLY
-    if (isAdmin) {
-      router.push("/admin");
-    } else {
-      router.push(redirect || "/");
-    }
-    router.refresh();
-  }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--bg-base)" }}>
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-        className="card w-full max-w-sm p-6 md:p-8 flex flex-col gap-6"
-      >
-        <div className="flex flex-col items-center gap-3">
-          <LogoMark size={48} />
-          <div className="text-center">
-            <h1 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
-              <span style={{ color: "var(--teal)" }}>Pyrexx</span> AI
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              Sign in to your dashboard
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label htmlFor="email" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
-              Email
-            </label>
-            <div className="relative">
-              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-              <input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors"
-                style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-                placeholder="you@clinic.com"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
-              Password
-            </label>
-            <div className="relative">
-              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 py-2.5 rounded-xl text-sm outline-none transition-colors"
-                style={{ paddingRight: "2.5rem", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer transition-colors"
-                style={{ color: "var(--text-muted)" }}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs" style={{ background: "var(--error-surface)", color: "var(--error-text)" }} role="alert">
-              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90"
-            style={{ background: "var(--teal)", color: "#fff" }}
-          >
-            {loading && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
-            {loading ? "Signing in…" : "Sign In"}
-          </button>
-        </form>
-
-        <p className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
-          New clinic?{" "}
-          <a href="/signup" className="font-semibold" style={{ color: "var(--teal-text)" }}>
-            Get started
-          </a>
-        </p>
-      </motion.div>
-    </div>
-  );
-}
-</file>
-
 <file path="src/types/database.ts">
 export type Json =
   | string
@@ -5748,462 +5620,174 @@ export type ProvisioningStatus = Database["public"]["Enums"]["provisioning_statu
 }
 </file>
 
-<file path="src/components/ProfilePanel.tsx">
+<file path="src/components/auth/LoginForm.tsx">
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
-import { motion, type Variants } from "framer-motion";
-import Link from "next/link";
-import {
-  Building2, Bot, Users, CreditCard, Bell,
-  Calendar, MapPin, Phone, Globe, Clock,
-  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2, Shield
-} from "lucide-react";
-import Switch from "./ui/Switch";
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
+import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getPlan } from "@/lib/plans";
-import type { Database as DB } from "@/types/database";
+import { isWhitelistedAdminEmail } from "@/lib/auth/admin";
+import LogoMark from "@/components/LogoMark";
 
-type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
-type Profile = DB["public"]["Tables"]["profiles"]["Row"];
+export default function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-const containerV: Variants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05, ease: "easeOut" } },
-};
-const itemV: Variants = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } },
-};
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-function Section({ icon: Icon, iconBg, iconColor, title, action, children }: {
-  icon: React.ElementType; iconBg: string; iconColor: string; title: string;
-  action?: React.ReactNode; children: React.ReactNode;
-}) {
-  return (
-    <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
-            <Icon size={14} style={{ color: iconColor }} aria-hidden="true" />
-          </div>
-          <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h3>
-        </div>
-        {action}
-      </div>
-      {children}
-    </motion.section>
-  );
-}
-
-function EditButton({ label }: { label: string }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
-      style={{ color: "var(--teal-text)", background: "var(--teal-surface)" }}
-    >
-      <Pencil size={11} aria-hidden="true" /> Edit
-    </button>
-  );
-}
-
-export default function ProfilePanel({ clinicId }: { clinicId?: string }) {
-  const [prefs, setPrefs] = useState({
-    dailyDigest: true,
-    missedCallSms: true,
-    newBookingPush: true,
-    weeklyReport: false,
-  });
-  
-  const [isPending, startTransition] = useTransition();
-  const [billingError, setBillingError] = useState<string | null>(null);
-
-  const [clinic, setClinic] = useState<Clinic | null>(null);
-  const [team, setTeam] = useState<Profile[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
-
-  useEffect(() => {
-    if (!clinicId) {
-      setLoadingData(false);
-      return;
-    }
-
-    async function fetchData(id: string) {
-      setLoadingData(true);
-      const supabase = createClient();
-      
-      const [clinicRes, teamRes] = await Promise.all([
-        supabase.from("clinics").select("*").eq("id", id).single(),
-        supabase.from("profiles").select("*").eq("clinic_id", id),
-      ]);
-
-      if (clinicRes.data) setClinic(clinicRes.data);
-      if (teamRes.data) setTeam(teamRes.data);
-      
-      setLoadingData(false);
-    }
-
-    fetchData(clinicId);
-  }, [clinicId]);
-
-  const togglePref = (key: keyof typeof prefs) =>
-    setPrefs((p) => ({ ...p, [key]: !p[key] }));
-
-  function handleManageBilling() {
-    if (!clinicId) {
-      setBillingError("Billing is not available — missing clinic context.");
-      return;
-    }
-    setBillingError(null);
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/billing/checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clinicId }),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Could not open billing portal");
-        window.location.href = json.checkoutUrl;
-      } catch (err) {
-        setBillingError(err instanceof Error ? err.message : "Something went wrong");
-      }
+    const supabase = createClient();
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
     });
+
+    if (signInError) {
+      setError(signInError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (!data.user) {
+      setError("Unable to authenticate user session.");
+      setLoading(false);
+      return;
+    }
+
+    // Determine admin status using verified whitelist + token metadata + profile role
+    const isEmailAdmin = isWhitelistedAdminEmail(data.user.email);
+    const isMetadataAdmin =
+      data.user.app_metadata?.role === "admin" ||
+      data.user.user_metadata?.role === "admin";
+
+    let isDbAdmin = false;
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .single();
+      isDbAdmin = profile?.role === "admin";
+    } catch {
+      // Non-fatal if DB query fails during login navigation
+    }
+
+    const isAdmin = isEmailAdmin || isMetadataAdmin || isDbAdmin;
+    const redirectParam = searchParams.get("redirect");
+
+    if (isAdmin) {
+      router.push(redirectParam?.startsWith("/admin") ? redirectParam : "/admin");
+    } else {
+      router.push(redirectParam || "/");
+    }
+    router.refresh();
   }
-
-  if (loadingData) {
-    return (
-      <div className="w-full h-64 flex flex-col items-center justify-center gap-3">
-        <Loader2 size={28} className="animate-spin" style={{ color: "var(--teal)" }} />
-        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Loading clinic profile data...</p>
-      </div>
-    );
-  }
-
-  // Admin Account view when accessing profile without a selected clinic
-  if (!clinicId) {
-    return (
-      <div className="w-full flex flex-col items-center justify-center gap-4 py-16 text-center card p-8">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
-          <Shield size={24} style={{ color: "var(--teal)" }} aria-hidden="true" />
-        </div>
-        <div>
-          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Admin Account Mode</h3>
-          <p className="text-xs mt-1 max-w-sm" style={{ color: "var(--text-muted)" }}>
-            Your account has executive administrator privileges. Manage and configure all client clinics from the Admin Command Center.
-          </p>
-        </div>
-        <Link
-          href="/admin"
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-md"
-          style={{ background: "var(--teal)", color: "#fff" }}
-        >
-          Open Admin Command Center &rarr;
-        </Link>
-      </div>
-    );
-  }
-
-  const clinicInfo = {
-    name: clinic?.name || "Unknown Clinic",
-    address: "Location on File", 
-    phone: clinic?.phone_number || "—",
-    website: clinic?.website || "—",
-    timezone: "Eastern Time (ET)", 
-    initials: (clinic?.name || "C")
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .substring(0, 2)
-      .toUpperCase(),
-  };
-
-  const aiSettings = {
-    agentName: clinic?.receptionist_name || "Aria",
-    voice: "Sarah — Warm & Professional (US English)",
-    greeting: `Thank you for calling ${clinic?.name || "us"}, this is ${clinic?.receptionist_name || "Aria"}. How can I help you today?`,
-    hours: [
-      { day: "Mon – Fri", time: "8:00 AM – 7:00 PM" },
-      { day: "Saturday",  time: "9:00 AM – 4:00 PM" },
-      { day: "Sunday",    time: "Closed" },
-    ],
-  };
-
-  const colors = ["#48C4C6", "#8952A5", "#60A5FA", "#F59E0B"];
-  const mappedTeamMembers = team.map((m, i) => ({
-    name: m.full_name || "Team Member",
-    role: m.role.charAt(0).toUpperCase() + m.role.slice(1),
-    email: m.role === "owner" ? clinic?.contact_email : "—",
-    initials: (m.full_name || "U")
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .substring(0, 2)
-      .toUpperCase(),
-    color: colors[i % colors.length],
-  }));
-
-  const currentPlanDefinition = clinic?.plan_tier ? getPlan(clinic.plan_tier) : null;
-  const plan = {
-    name: currentPlanDefinition?.name || "AI Receptionist Plan",
-    price: clinic?.plan_price_cents 
-      ? `$${(clinic.plan_price_cents / 100).toLocaleString()}/month` 
-      : (currentPlanDefinition?.priceLabel || "TBD"),
-    renewal: "Active Monthly",
-    minutesUsed: 0,
-    minutesIncluded: 2500,
-  };
-  
-  const isSubActive = clinic?.subscription_status === "active";
-  const usagePct = Math.round((plan.minutesUsed / plan.minutesIncluded) * 100);
-
-  const integrations = [
-    { 
-      name: "AI Receptionist Agent", 
-      desc: "Powers your AI receptionist calls", 
-      status: clinic?.agent_id ? "connected" : "not_connected", 
-      icon: Bot 
-    },
-    { 
-      name: "Google Calendar",        
-      desc: "Syncs bookings in real time",       
-      status: "not_connected", 
-      icon: Calendar 
-    },
-    { 
-      name: `CRM (${clinic?.crm_provider && clinic.crm_provider !== 'none' ? clinic.crm_provider.toUpperCase() : 'None'})`, 
-      desc: "Sync patient records & call logs",  
-      status: clinic?.crm_provider && clinic.crm_provider !== 'none' ? "connected" : "not_connected", 
-      icon: Database 
-    },
-  ];
 
   return (
-    <motion.div variants={containerV} initial="hidden" animate="show" className="flex flex-col gap-4">
-      <motion.div variants={itemV}>
-        <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Profile &amp; Settings</h2>
-        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-          Manage your clinic, AI receptionist, team, and integrations
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--bg-base)" }}>
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="card w-full max-w-sm p-6 md:p-8 flex flex-col gap-6"
+      >
+        <div className="flex flex-col items-center gap-3">
+          <LogoMark size={48} />
+          <div className="text-center">
+            <h1 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
+              <span style={{ color: "var(--teal)" }}>Pyrexx</span> AI
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              Sign in to your dashboard
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="email" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
+              Email
+            </label>
+            <div className="relative">
+              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+              <input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-colors"
+                style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+                placeholder="you@clinic.com"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
+              Password
+            </label>
+            <div className="relative">
+              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-9 py-2.5 rounded-xl text-sm outline-none transition-colors"
+                style={{ paddingRight: "2.5rem", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer transition-colors"
+                style={{ color: "var(--text-muted)" }}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs" style={{ background: "var(--error-surface)", color: "var(--error-text)" }} role="alert">
+              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90"
+            style={{ background: "var(--teal)", color: "#fff" }}
+          >
+            {loading && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
+            {loading ? "Signing in…" : "Sign In"}
+          </button>
+        </form>
+
+        <p className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
+          New clinic?{" "}
+          <a href="/signup" className="font-semibold" style={{ color: "var(--teal-text)" }}>
+            Get started
+          </a>
         </p>
       </motion.div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Main Column */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          <Section icon={Building2} iconBg="var(--teal-surface)" iconColor="var(--teal)"
-            title="Clinic Profile" action={<EditButton label="Edit clinic profile" />}>
-            <div className="flex items-start gap-4">
-              <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-extrabold flex-shrink-0"
-                style={{ background: "var(--teal-surface)", color: "var(--teal-text)" }}
-                aria-hidden="true"
-              >
-                {clinicInfo.initials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-base font-bold mb-2" style={{ color: "var(--text-primary)" }}>{clinicInfo.name}</h4>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
-                    <MapPin size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-                    <span className="truncate">{clinicInfo.address}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
-                    <Phone size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-                    <span>{clinicInfo.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
-                    <Globe size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-                    <span>{clinicInfo.website}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
-                    <Clock size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
-                    <span>{clinicInfo.timezone}</span>
-                  </div>
-                </dl>
-              </div>
-            </div>
-          </Section>
-
-          <Section icon={Bot} iconBg="var(--purple-surface)" iconColor="var(--purple)"
-            title="AI Receptionist" action={<EditButton label="Edit AI receptionist settings" />}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Agent Name</p>
-                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{aiSettings.agentName}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Voice</p>
-                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{aiSettings.voice}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Business Hours</p>
-                  <ul className="space-y-1" role="list">
-                    {aiSettings.hours.map((h) => (
-                      <li key={h.day} className="flex justify-between text-xs">
-                        <span style={{ color: "var(--text-secondary)" }}>{h.day}</span>
-                        <span className="font-medium" style={{ color: "var(--text-primary)" }}>{h.time}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Greeting Script</p>
-                <div className="rounded-2xl p-3 text-xs italic leading-relaxed"
-                  style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
-                  "{aiSettings.greeting}"
-                </div>
-              </div>
-            </div>
-          </Section>
-
-          <Section icon={Users} iconBg="var(--info-surface)" iconColor="var(--info-text)"
-            title="Team Members"
-            action={
-              <button type="button" aria-label="Invite team member"
-                className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
-                style={{ color: "var(--info-text)", background: "var(--info-surface)" }}>
-                <UserPlus size={11} aria-hidden="true" /> Invite
-              </button>
-            }>
-            <ul className="space-y-3" role="list">
-              {mappedTeamMembers.map((m) => (
-                <li key={m.name + m.role} className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                    style={{ background: m.color }} aria-hidden="true">
-                    {m.initials}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{m.name}</p>
-                    <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{m.role} {m.email !== "—" && `· ${m.email}`}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Section>
-        </div>
-
-        {/* Sidebar Column */}
-        <div className="flex flex-col gap-4">
-          <Section icon={CreditCard} iconBg="var(--success-surface)" iconColor="var(--success-text)" title="Subscription">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{plan.name}</p>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{plan.price} · {plan.renewal}</p>
-              </div>
-              <span className="badge text-[10px]" style={{ 
-                background: isSubActive ? "var(--success-surface)" : "var(--warning-surface)", 
-                color: isSubActive ? "var(--success-text)" : "var(--warning-text)" 
-              }}>
-                {isSubActive ? <CheckCircle2 size={10} aria-hidden="true" /> : <Clock size={10} aria-hidden="true" />}
-                {isSubActive ? "Active" : "Pending Setup"}
-              </span>
-            </div>
-            <div>
-              <div className="flex justify-between text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>
-                <span>Call minutes used</span>
-                <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                  {plan.minutesUsed.toLocaleString()} / {plan.minutesIncluded.toLocaleString()}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}
-                role="progressbar" aria-valuenow={usagePct} aria-valuemin={0} aria-valuemax={100} aria-label="Call minutes used this period">
-                <motion.div className="h-full rounded-full" style={{ background: "var(--teal)" }}
-                  initial={{ width: 0 }} animate={{ width: `${usagePct}%` }} transition={{ duration: 0.7, ease: "easeOut" }} />
-              </div>
-            </div>
-            <button type="button" onClick={handleManageBilling} disabled={isPending}
-              className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
-              style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
-              {isPending && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
-              {isPending ? "Opening billing…" : "Manage Billing"}
-            </button>
-            {billingError && (
-              <p className="text-[11px] mt-1.5" style={{ color: "var(--error-text)" }} role="alert">{billingError}</p>
-            )}
-          </Section>
-
-          <Section icon={Database} iconBg="var(--teal-surface)" iconColor="var(--teal)" title="Integrations">
-            <ul className="space-y-3" role="list">
-              {integrations.map((i) => {
-                const Icon = i.icon;
-                const connected = i.status === "connected";
-                return (
-                  <li key={i.name} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: connected ? "var(--teal-surface)" : "var(--bg-sunken)" }}>
-                      <Icon size={14} style={{ color: connected ? "var(--teal)" : "var(--text-muted)" }} aria-hidden="true" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{i.name}</p>
-                      <p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{i.desc}</p>
-                    </div>
-                    {connected ? (
-                      <span className="badge text-[10px] flex-shrink-0" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
-                        <CheckCircle2 size={9} aria-hidden="true" /> Connected
-                      </span>
-                    ) : (
-                      <button type="button" aria-label={`Connect ${i.name}`}
-                        className="text-[10px] font-bold flex-shrink-0 cursor-pointer rounded-lg px-2 py-1 transition-colors"
-                        style={{ color: "var(--purple-text)", background: "var(--purple-surface)" }}>
-                        Connect
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </Section>
-
-          <Section icon={Bell} iconBg="var(--warning-surface)" iconColor="var(--warning-text)" title="Notifications">
-            <ul className="space-y-3" role="list">
-              <li className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>Daily call digest</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Email summary every morning</p>
-                </div>
-                <Switch checked={prefs.dailyDigest} onChange={() => togglePref("dailyDigest")} label="Daily call digest" />
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>Missed call SMS</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Text alert for escalated calls</p>
-                </div>
-                <Switch checked={prefs.missedCallSms} onChange={() => togglePref("missedCallSms")} label="Missed call SMS alerts" />
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>New booking alerts</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Push notification on booking</p>
-                </div>
-                <Switch checked={prefs.newBookingPush} onChange={() => togglePref("newBookingPush")} label="New booking push notifications" />
-              </li>
-            </ul>
-          </Section>
-
-          <div className="flex gap-2">
-            <button type="button"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
-              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
-              <Download size={13} aria-hidden="true" /> Export Data
-            </button>
-            <button type="button"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
-              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
-              onClick={async () => {
-                const supabase = createClient();
-                await supabase.auth.signOut();
-                window.location.href = '/login';
-              }}>
-              <LogOut size={13} aria-hidden="true" /> Sign Out
-            </button>
-          </div>
-        </div>
-      </div>
-    </motion.div>
+    </div>
   );
 }
 </file>
@@ -6358,44 +5942,680 @@ export async function updateClinicStatus(clinicId: string, status: ClinicStatus)
 }
 </file>
 
-<file path="src/app/page.tsx">
+<file path="src/components/ProfilePanel.tsx">
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { AnimatePresence } from "framer-motion";
-import LoadingAnimation from "@/components/LoadingAnimation";
-import DashboardHome from "@/components/DashboardHome";
+import { useState, useEffect, useTransition } from "react";
+import { motion, type Variants } from "framer-motion";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Building2, Bot, Users, CreditCard, Bell,
+  Calendar, MapPin, Phone, Globe, Clock,
+  Database, CheckCircle2, Pencil, UserPlus, LogOut, Download, Loader2, Shield,
+  AlertCircle, Mail
+} from "lucide-react";
+import Switch from "./ui/Switch";
+import { createClient } from "@/lib/supabase/client";
+import { getPlan } from "@/lib/plans";
+import type { Database as DB } from "@/types/database";
 
-export default function Home() {
-  const [isLoading, setIsLoading] = useState(true);
+type Clinic = DB["public"]["Tables"]["clinics"]["Row"];
+type Profile = DB["public"]["Tables"]["profiles"]["Row"];
+
+const containerV: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.05, ease: "easeOut" } },
+};
+const itemV: Variants = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } },
+};
+
+function Section({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  title,
+  action,
+  children,
+}: {
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
+            <Icon size={14} style={{ color: iconColor }} aria-hidden="true" />
+          </div>
+          <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h3>
+        </div>
+        {action}
+      </div>
+      {children}
+    </motion.section>
+  );
+}
+
+function EditButton({ label }: { label: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
+      style={{ color: "var(--teal-text)", background: "var(--teal-surface)" }}
+    >
+      <Pencil size={11} aria-hidden="true" /> Edit
+    </button>
+  );
+}
+
+export interface ProfilePanelProps {
+  clinicId?: string;
+  isAdmin?: boolean;
+  isInspectionMode?: boolean;
+  userEmail?: string;
+}
+
+export default function ProfilePanel({
+  clinicId,
+  isAdmin = false,
+  isInspectionMode = false,
+  userEmail,
+}: ProfilePanelProps) {
+  const router = useRouter();
+  const [prefs, setPrefs] = useState({
+    dailyDigest: true,
+    missedCallSms: true,
+    newBookingPush: true,
+    weeklyReport: false,
+  });
+
+  const [isPending, startTransition] = useTransition();
+  const [billingError, setBillingError] = useState<string | null>(null);
+
+  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const [team, setTeam] = useState<Profile[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    const hasVisited = sessionStorage.getItem("pyrexx-loaded");
-
-    if (hasVisited) {
-      setIsLoading(false);
+    if (!clinicId) {
+      setLoadingData(false);
       return;
     }
 
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-      sessionStorage.setItem("pyrexx-loaded", "1");
-    }, 1400);
+    async function fetchData(id: string) {
+      setLoadingData(true);
+      const supabase = createClient();
 
-    return () => clearTimeout(timer);
-  }, []);
+      const [clinicRes, teamRes] = await Promise.all([
+        supabase.from("clinics").select("*").eq("id", id).single(),
+        supabase.from("profiles").select("*").eq("clinic_id", id),
+      ]);
+
+      if (clinicRes.data) setClinic(clinicRes.data);
+      if (teamRes.data) setTeam(teamRes.data);
+
+      setLoadingData(false);
+    }
+
+    fetchData(clinicId);
+  }, [clinicId]);
+
+  const togglePref = (key: keyof typeof prefs) =>
+    setPrefs((p) => ({ ...p, [key]: !p[key] }));
+
+  function handleManageBilling() {
+    if (!clinicId) {
+      setBillingError("Billing is not available — missing clinic context.");
+      return;
+    }
+    setBillingError(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clinicId }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Could not open billing portal");
+        window.location.href = json.checkoutUrl;
+      } catch (err) {
+        setBillingError(err instanceof Error ? err.message : "Something went wrong");
+      }
+    });
+  }
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
+  if (loadingData) {
+    return (
+      <div className="w-full h-64 flex flex-col items-center justify-center gap-3">
+        <Loader2 size={28} className="animate-spin" style={{ color: "var(--teal)" }} />
+        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Loading clinic profile data...</p>
+      </div>
+    );
+  }
+
+  // STATE 1: Verified Admin without an active inspected clinic
+  if (isAdmin && !clinicId) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center gap-4 py-16 text-center card p-8">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
+          <Shield size={24} style={{ color: "var(--teal)" }} aria-hidden="true" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Executive Administrator Mode</h3>
+          <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-muted)" }}>
+            Your account has executive administrator privileges across Pyrexx AI. Manage client clinics, view MRR, and configure integrations in the Command Center.
+          </p>
+        </div>
+        <div className="flex gap-3 mt-2">
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-md"
+            style={{ background: "var(--teal)", color: "#fff" }}
+          >
+            Open Admin Command Center &rarr;
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // STATE 2: Unlinked or Orphaned Account (Neither admin nor attached to a clinic)
+  if (!clinicId) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center gap-4 py-16 text-center card p-8">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--warning-surface)" }}>
+          <AlertCircle size={24} style={{ color: "var(--warning-text)" }} aria-hidden="true" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Account Setup in Progress</h3>
+          <p className="text-xs mt-1 max-w-md leading-relaxed" style={{ color: "var(--text-muted)" }}>
+            Your account is authenticated ({userEmail || "on file"}), but has not yet been linked to an active clinic workspace.
+            Our setup team is currently provisioning your AI Receptionist agent.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 mt-2">
+          <a
+            href="mailto:hello@pyrexxai.com"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{ background: "var(--teal)", color: "#fff" }}
+          >
+            <Mail size={15} /> Contact Support
+          </a>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // STATE 3: Active Clinic Workspace
+  const clinicInfo = {
+    name: clinic?.name || "Unknown Clinic",
+    address: "Location on File",
+    phone: clinic?.phone_number || "—",
+    website: clinic?.website || "—",
+    timezone: "Eastern Time (ET)",
+    initials: (clinic?.name || "C")
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase(),
+  };
+
+  const aiSettings = {
+    agentName: clinic?.receptionist_name || "Aria",
+    voice: "Sarah — Warm & Professional (US English)",
+    greeting: `Thank you for calling ${clinic?.name || "us"}, this is ${clinic?.receptionist_name || "Aria"}. How can I help you today?`,
+    hours: [
+      { day: "Mon – Fri", time: "8:00 AM – 7:00 PM" },
+      { day: "Saturday",  time: "9:00 AM – 4:00 PM" },
+      { day: "Sunday",    time: "Closed" },
+    ],
+  };
+
+  const colors = ["#48C4C6", "#8952A5", "#60A5FA", "#F59E0B"];
+  const mappedTeamMembers = team.map((m, i) => ({
+    name: m.full_name || "Team Member",
+    role: m.role.charAt(0).toUpperCase() + m.role.slice(1),
+    email: m.role === "owner" ? clinic?.contact_email : "—",
+    initials: (m.full_name || "U")
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase(),
+    color: colors[i % colors.length],
+  }));
+
+  const currentPlanDefinition = clinic?.plan_tier ? getPlan(clinic.plan_tier) : null;
+  const plan = {
+    name: currentPlanDefinition?.name || "AI Receptionist Plan",
+    price: clinic?.plan_price_cents
+      ? `$${(clinic.plan_price_cents / 100).toLocaleString()}/month`
+      : currentPlanDefinition?.priceLabel || "TBD",
+    renewal: "Active Monthly",
+    minutesUsed: 0,
+    minutesIncluded: 2500,
+  };
+
+  const isSubActive = clinic?.subscription_status === "active";
+  const usagePct = Math.round((plan.minutesUsed / plan.minutesIncluded) * 100);
+
+  const integrations = [
+    {
+      name: "AI Receptionist Agent",
+      desc: "Powers your AI receptionist calls",
+      status: clinic?.agent_id ? "connected" : "not_connected",
+      icon: Bot,
+    },
+    {
+      name: "Google Calendar",
+      desc: "Syncs bookings in real time",
+      status: "not_connected",
+      icon: Calendar,
+    },
+    {
+      name: `CRM (${clinic?.crm_provider && clinic.crm_provider !== "none" ? clinic.crm_provider.toUpperCase() : "None"})`,
+      desc: "Sync patient records & call logs",
+      status: clinic?.crm_provider && clinic.crm_provider !== "none" ? "connected" : "not_connected",
+      icon: Database,
+    },
+  ];
 
   return (
-    <main className="relative min-h-screen overflow-hidden">
-      <AnimatePresence mode="wait">
-        {isLoading ? (
-          <LoadingAnimation key="loading" />
-        ) : (
-          <Suspense key="dashboard" fallback={null}>
-            <DashboardHome />
-          </Suspense>
-        )}
-      </AnimatePresence>
+    <motion.div variants={containerV} initial="hidden" animate="show" className="flex flex-col gap-4">
+      <motion.div variants={itemV}>
+        <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Profile &amp; Settings</h2>
+        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+          Manage your clinic, AI receptionist, team, and integrations
+        </p>
+      </motion.div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Main Column */}
+        <div className="lg:col-span-2 flex flex-col gap-4">
+          <Section
+            icon={Building2}
+            iconBg="var(--teal-surface)"
+            iconColor="var(--teal)"
+            title="Clinic Profile"
+            action={<EditButton label="Edit clinic profile" />}
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-extrabold flex-shrink-0"
+                style={{ background: "var(--teal-surface)", color: "var(--teal-text)" }}
+                aria-hidden="true"
+              >
+                {clinicInfo.initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-base font-bold mb-2" style={{ color: "var(--text-primary)" }}>{clinicInfo.name}</h4>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
+                    <MapPin size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+                    <span className="truncate">{clinicInfo.address}</span>
+                  </div>
+                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
+                    <Phone size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+                    <span>{clinicInfo.phone}</span>
+                  </div>
+                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
+                    <Globe size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+                    <span>{clinicInfo.website}</span>
+                  </div>
+                  <div className="flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
+                    <Clock size={13} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+                    <span>{clinicInfo.timezone}</span>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            icon={Bot}
+            iconBg="var(--purple-surface)"
+            iconColor="var(--purple)"
+            title="AI Receptionist"
+            action={<EditButton label="Edit AI receptionist settings" />}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Agent Name</p>
+                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{aiSettings.agentName}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Voice</p>
+                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{aiSettings.voice}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Business Hours</p>
+                  <ul className="space-y-1" role="list">
+                    {aiSettings.hours.map((h) => (
+                      <li key={h.day} className="flex justify-between text-xs">
+                        <span style={{ color: "var(--text-secondary)" }}>{h.day}</span>
+                        <span className="font-medium" style={{ color: "var(--text-primary)" }}>{h.time}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Greeting Script</p>
+                <div
+                  className="rounded-2xl p-3 text-xs italic leading-relaxed"
+                  style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
+                >
+                  "{aiSettings.greeting}"
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            icon={Users}
+            iconBg="var(--info-surface)"
+            iconColor="var(--info-text)"
+            title="Team Members"
+            action={
+              <button
+                type="button"
+                aria-label="Invite team member"
+                className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer rounded-lg px-2 py-1 transition-colors"
+                style={{ color: "var(--info-text)", background: "var(--info-surface)" }}
+              >
+                <UserPlus size={11} aria-hidden="true" /> Invite
+              </button>
+            }
+          >
+            <ul className="space-y-3" role="list">
+              {mappedTeamMembers.map((m) => (
+                <li key={m.name + m.role} className="flex items-center gap-3">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                    style={{ background: m.color }}
+                    aria-hidden="true"
+                  >
+                    {m.initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{m.name}</p>
+                    <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
+                      {m.role} {m.email !== "—" && `· ${m.email}`}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </div>
+
+        {/* Sidebar Column */}
+        <div className="flex flex-col gap-4">
+          <Section icon={CreditCard} iconBg="var(--success-surface)" iconColor="var(--success-text)" title="Subscription">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{plan.name}</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{plan.price} · {plan.renewal}</p>
+              </div>
+              <span
+                className="badge text-[10px]"
+                style={{
+                  background: isSubActive ? "var(--success-surface)" : "var(--warning-surface)",
+                  color: isSubActive ? "var(--success-text)" : "var(--warning-text)",
+                }}
+              >
+                {isSubActive ? <CheckCircle2 size={10} aria-hidden="true" /> : <Clock size={10} aria-hidden="true" />}
+                {isSubActive ? "Active" : "Pending Setup"}
+              </span>
+            </div>
+            <div>
+              <div className="flex justify-between text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>
+                <span>Call minutes used</span>
+                <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {plan.minutesUsed.toLocaleString()} / {plan.minutesIncluded.toLocaleString()}
+                </span>
+              </div>
+              <div
+                className="h-1.5 rounded-full overflow-hidden"
+                style={{ background: "var(--bg-sunken)" }}
+                role="progressbar"
+                aria-valuenow={usagePct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Call minutes used this period"
+              >
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: "var(--teal)" }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${usagePct}%` }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleManageBilling}
+              disabled={isPending}
+              className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60"
+              style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+            >
+              {isPending && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
+              {isPending ? "Opening billing…" : "Manage Billing"}
+            </button>
+            {billingError && (
+              <p className="text-[11px] mt-1.5" style={{ color: "var(--error-text)" }} role="alert">{billingError}</p>
+            )}
+          </Section>
+
+          <Section icon={Database} iconBg="var(--teal-surface)" iconColor="var(--teal)" title="Integrations">
+            <ul className="space-y-3" role="list">
+              {integrations.map((i) => {
+                const Icon = i.icon;
+                const connected = i.status === "connected";
+                return (
+                  <li key={i.name} className="flex items-center gap-3">
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: connected ? "var(--teal-surface)" : "var(--bg-sunken)" }}
+                    >
+                      <Icon size={14} style={{ color: connected ? "var(--teal)" : "var(--text-muted)" }} aria-hidden="true" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{i.name}</p>
+                      <p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{i.desc}</p>
+                    </div>
+                    {connected ? (
+                      <span className="badge text-[10px] flex-shrink-0" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
+                        <CheckCircle2 size={9} aria-hidden="true" /> Connected
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Connect ${i.name}`}
+                        className="text-[10px] font-bold flex-shrink-0 cursor-pointer rounded-lg px-2 py-1 transition-colors"
+                        style={{ color: "var(--purple-text)", background: "var(--purple-surface)" }}
+                      >
+                        Connect
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Section>
+
+          <Section icon={Bell} iconBg="var(--warning-surface)" iconColor="var(--warning-text)" title="Notifications">
+            <ul className="space-y-3" role="list">
+              <li className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>Daily call digest</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Email summary every morning</p>
+                </div>
+                <Switch checked={prefs.dailyDigest} onChange={() => togglePref("dailyDigest")} label="Daily call digest" />
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>Missed call SMS</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Text alert for escalated calls</p>
+                </div>
+                <Switch checked={prefs.missedCallSms} onChange={() => togglePref("missedCallSms")} label="Missed call SMS alerts" />
+              </li>
+              <li className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>New booking alerts</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Push notification on booking</p>
+                </div>
+                <Switch checked={prefs.newBookingPush} onChange={() => togglePref("newBookingPush")} label="New booking push notifications" />
+              </li>
+            </ul>
+          </Section>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
+            >
+              <Download size={13} aria-hidden="true" /> Export Data
+            </button>
+            <button
+              type="button"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
+              onClick={handleSignOut}
+            >
+              <LogOut size={13} aria-hidden="true" /> Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+</file>
+
+<file path="src/app/page.tsx">
+import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import { createClient } from "@/lib/supabase/server";
+import { verifyAdminStatus } from "@/lib/auth/admin";
+import DashboardHome from "@/components/DashboardHome";
+
+export const metadata = {
+  title: "Client Dashboard | Pyrexx AI",
+  description: "Monitor live call activity, bookings, and AI receptionist performance.",
+};
+
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function HomePage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const previewClinicId = typeof params.previewClinicId === "string" ? params.previewClinicId : undefined;
+  const tab = typeof params.tab === "string" ? params.tab : "dashboard";
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const isAdmin = await verifyAdminStatus(user);
+
+  // If an Admin visits `/` without inspecting a clinic, redirect to Command Center
+  if (isAdmin && !previewClinicId) {
+    redirect("/admin");
+  }
+
+  let clinicId: string | undefined = undefined;
+  let clinicName: string | undefined = undefined;
+  let isInspectionMode = false;
+
+  if (isAdmin && previewClinicId) {
+    // Admin is actively inspecting a tenant dashboard
+    isInspectionMode = true;
+    clinicId = previewClinicId;
+
+    const { data: inspectedClinic } = await supabase
+      .from("clinics")
+      .select("name")
+      .eq("id", previewClinicId)
+      .single();
+
+    clinicName = inspectedClinic?.name || "Inspected Clinic";
+  } else {
+    // Standard clinic user (owner/staff): look up their assigned clinic_id
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("clinic_id, role, full_name")
+      .eq("id", user.id)
+      .single();
+
+    if (profile?.clinic_id) {
+      clinicId = profile.clinic_id;
+
+      const { data: clinic } = await supabase
+        .from("clinics")
+        .select("name")
+        .eq("id", profile.clinic_id)
+        .single();
+
+      clinicName = clinic?.name || profile.full_name || "My Clinic";
+    }
+  }
+
+  return (
+    <main className="relative min-h-screen">
+      <Suspense fallback={null}>
+        <DashboardHome
+          initialClinicId={clinicId}
+          isAdmin={isAdmin}
+          isInspectionMode={isInspectionMode}
+          previewClinicId={previewClinicId}
+          clinicName={clinicName}
+          userEmail={user.email || ""}
+          initialTab={tab}
+        />
+      </Suspense>
     </main>
   );
 }
@@ -6559,74 +6779,6 @@ export default function MeetingModal({ isOpen, onClose, meeting }: MeetingModalP
     </AnimatePresence>
   );
 }
-</file>
-
-<file path="src/proxy.ts">
-import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
-import { verifyAdminStatus } from "@/lib/auth/admin";
-
-const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/onboarding"];
-
-function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
-export async function proxy(request: NextRequest) {
-  const { response, user } = await updateSession(request);
-  const { pathname, searchParams } = request.nextUrl;
-
-  // Webhooks authenticate via HMAC signatures — skip session checks
-  if (pathname.startsWith("/api/webhooks/")) {
-    return response;
-  }
-
-  if (user) {
-    const isAdmin = await verifyAdminStatus(user);
-    const isInspectingClinic = searchParams.has("previewClinicId");
-
-    // Redirect authenticated users away from public auth pages
-    if (isPublicPath(pathname)) {
-      const url = request.nextUrl.clone();
-      url.pathname = isAdmin ? "/admin" : "/";
-      url.search = "";
-      return NextResponse.redirect(url);
-    }
-
-    // STRICT ADMIN ROUTING:
-    // Admin on root `/` without an active preview parameter is routed to `/admin`
-    if (pathname === "/" && isAdmin && !isInspectingClinic) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/admin";
-      return NextResponse.redirect(url);
-    }
-
-    // Gate `/admin` routes against non-admin clinic users
-    if (pathname.startsWith("/admin") && !isAdmin) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/";
-      return NextResponse.redirect(url);
-    }
-
-    return response;
-  } else {
-    // Unauthenticated user routing
-    if (isPublicPath(pathname)) {
-      return response;
-    }
-
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
-  }
-}
-
-export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
-};
 </file>
 
 <file path="src/app/globals.css">
@@ -6976,6 +7128,87 @@ export default function DonutChart({ title, value, subtitle, percentage, trend }
 }
 </file>
 
+<file path="src/proxy.ts">
+import { NextResponse, type NextRequest } from "next/server";
+import { updateSession } from "@/lib/supabase/middleware";
+import { verifyAdminStatus } from "@/lib/auth/admin";
+
+const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/onboarding"];
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+export async function proxy(request: NextRequest) {
+  const { response, user } = await updateSession(request);
+  const { pathname, searchParams } = request.nextUrl;
+
+  // Webhooks authenticate via HMAC signatures — skip session checks
+  if (pathname.startsWith("/api/webhooks/")) {
+    return response;
+  }
+
+  if (user) {
+    const isAdmin = await verifyAdminStatus(user);
+    const isInspectingClinic = searchParams.has("previewClinicId");
+
+    // Redirect authenticated users away from public auth pages
+    if (isPublicPath(pathname)) {
+      const url = request.nextUrl.clone();
+      url.pathname = isAdmin ? "/admin" : "/";
+      url.search = "";
+      const redirectRes = NextResponse.redirect(url);
+      response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+      return redirectRes;
+    }
+
+    // STRICT ADMIN ROUTING:
+    // Admin on root `/` without an active preview parameter is routed to `/admin`
+    if (pathname === "/" && isAdmin && !isInspectingClinic) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin";
+      const redirectRes = NextResponse.redirect(url);
+      response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+      return redirectRes;
+    }
+
+    // Gate `/admin` routes against non-admin clinic users
+    if (pathname.startsWith("/admin") && !isAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      const redirectRes = NextResponse.redirect(url);
+      response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+      return redirectRes;
+    }
+
+    return response;
+  } else {
+    // Unauthenticated user routing
+    if (isPublicPath(pathname)) {
+      return response;
+    }
+
+    // For API routes, return structured 401 JSON instead of redirecting to login page
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized: Authentication required." }, { status: 401 });
+    }
+
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("redirect", pathname);
+    const redirectRes = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((c) => redirectRes.cookies.set(c.name, c.value, c));
+    return redirectRes;
+  }
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
+</file>
+
 <file path="src/components/LoadingAnimation.tsx">
 "use client";
 
@@ -7103,7 +7336,7 @@ const itemV: Variants = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } },
 };
 
-/* ─── Mock Initial Data ─────────────────────────────────────────── */
+/* ─── Mock Initial Data Fallbacks ────────────────────────────────── */
 const initialRecentCalls: Meeting[] = [
   { id: 1, name: "Sarah Jenkins",  type: "Botox Consult",    time: "Today, 10:00 AM",    status: "Completed", transcriptPreview: "Client asked about recovery time. AI explained 24-48h, booked follow-up." },
   { id: 2, name: "Mike Ross",      type: "Back Massage",     time: "Yesterday, 2:30 PM", status: "Completed", transcriptPreview: "60-min deep tissue confirmed. Intake forms sent via SMS." },
@@ -7132,11 +7365,23 @@ function statusStyle(status: string) {
 function MeetingRow({ meeting, onSelect }: { meeting: Meeting; onSelect: (m: Meeting) => void }) {
   const { bg, color, Icon } = statusStyle(meeting.status);
   return (
-    <button type="button" onClick={() => onSelect(meeting)} className="w-full text-left flex items-center gap-3 px-2 py-3 rounded-xl cursor-pointer group transition-colors" style={{ borderBottom: "1px solid var(--border-subtle)" }} onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")} onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}>
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}><Icon size={14} style={{ color }} aria-hidden="true" /></div>
+    <button
+      type="button"
+      onClick={() => onSelect(meeting)}
+      className="w-full text-left flex items-center gap-3 px-2 py-3 rounded-xl cursor-pointer group transition-colors"
+      style={{ borderBottom: "1px solid var(--border-subtle)" }}
+      onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-sunken)")}
+      onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+        <Icon size={14} style={{ color }} aria-hidden="true" />
+      </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{meeting.name}</p>
-        <p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{meeting.type}{meeting.bookedAt ? <span style={{ color: "var(--teal-text)" }}> · {meeting.bookedAt}</span> : <span> · {meeting.time}</span>}</p>
+        <p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>
+          {meeting.type}
+          {meeting.bookedAt ? <span style={{ color: "var(--teal-text)" }}> · {meeting.bookedAt}</span> : <span> · {meeting.time}</span>}
+        </p>
       </div>
       <ChevronRight size={13} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "var(--text-muted)" }} aria-hidden="true" />
     </button>
@@ -7149,28 +7394,65 @@ function ListCard({ title, icon: Icon, iconBg, iconColor, meetings, onSelectMeet
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}><Icon size={14} style={{ color: iconColor }} aria-hidden="true" /></div>
+          <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
+            <Icon size={14} style={{ color: iconColor }} aria-hidden="true" />
+          </div>
           <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
         </div>
-        <button type="button" onClick={onViewAll} className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer transition-colors rounded-lg px-2 py-1" style={{ color: iconColor, background: iconBg }}>
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer transition-colors rounded-lg px-2 py-1"
+          style={{ color: iconColor, background: iconBg }}
+        >
           View all <ChevronRight size={11} aria-hidden="true" />
         </button>
       </div>
-      <div role="list" className="flex flex-col">{preview.map((m: any) => (<MeetingRow key={m.id} meeting={m} onSelect={onSelectMeeting} />))}</div>
+      <div role="list" className="flex flex-col">
+        {preview.map((m: any) => (
+          <MeetingRow key={m.id} meeting={m} onSelect={onSelectMeeting} />
+        ))}
+      </div>
     </motion.section>
   );
 }
 
 function InsightsCard() {
   const intents = [
-    { label: "Botox / Injectables", pct: 45, color: "var(--teal)" }, { label: "Massage & Body", pct: 28, color: "var(--purple)" },
-    { label: "Facials & Skin", pct: 18, color: "#60A5FA" }, { label: "General Inquiries", pct: 9, color: "#F59E0B" },
+    { label: "Botox / Injectables", pct: 45, color: "var(--teal)" },
+    { label: "Massage & Body", pct: 28, color: "var(--purple)" },
+    { label: "Facials & Skin", pct: 18, color: "#60A5FA" },
+    { label: "General Inquiries", pct: 9, color: "#F59E0B" },
   ];
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}><Zap size={14} style={{ color: "var(--teal)" }} aria-hidden="true" /></div><h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Call Intents</h2></div>
-      <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img">{intents.map((i) => (<div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />))}</div>
-      <ul className="space-y-2.5" role="list">{intents.map((i) => (<li key={i.label}><div className="flex justify-between items-center mb-1"><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i.color }} aria-hidden="true" /><span className="text-xs" style={{ color: "var(--text-secondary)" }}>{i.label}</span></div><span className="text-xs font-bold" style={{ color: i.color }}>{i.pct}%</span></div><div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}><motion.div className="h-full rounded-full" style={{ background: i.color }} initial={{ width: 0 }} animate={{ width: `${i.pct}%` }} transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} /></div></li>))}</ul>
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--teal-surface)" }}>
+          <Zap size={14} style={{ color: "var(--teal)" }} aria-hidden="true" />
+        </div>
+        <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Call Intents</h2>
+      </div>
+      <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img">
+        {intents.map((i) => (
+          <div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />
+        ))}
+      </div>
+      <ul className="space-y-2.5" role="list">
+        {intents.map((i) => (
+          <li key={i.label}>
+            <div className="flex justify-between items-center mb-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i.color }} aria-hidden="true" />
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{i.label}</span>
+              </div>
+              <span className="text-xs font-bold" style={{ color: i.color }}>{i.pct}%</span>
+            </div>
+            <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}>
+              <motion.div className="h-full rounded-full" style={{ background: i.color }} initial={{ width: 0 }} animate={{ width: `${i.pct}%` }} transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} />
+            </div>
+          </li>
+        ))}
+      </ul>
     </motion.section>
   );
 }
@@ -7184,21 +7466,53 @@ function OutcomesCard() {
   const total = outcomes.reduce((s, o) => s + o.count, 0);
   return (
     <motion.section variants={itemV} className="card p-4 md:p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--purple-surface)" }}><TrendingUp size={14} style={{ color: "var(--purple)" }} aria-hidden="true" /></div><h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Outcomes</h2><span className="ml-auto text-xs font-semibold badge" style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}>{total} today</span></div>
-      <ul className="space-y-3" role="list">{outcomes.map(({ label, count, Icon, bg, color }) => { const pct = Math.round((count / total) * 100); return (<li key={label} className="flex items-center gap-3"><div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}><Icon size={14} style={{ color }} aria-hidden="true" /></div><div className="flex-1 min-w-0"><div className="flex justify-between items-center mb-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span><span className="text-xs font-bold" style={{ color }}>{count}</span></div><div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}><motion.div className="h-full rounded-full" style={{ background: color }} initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }} /></div></div></li>); })}</ul>
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: "var(--purple-surface)" }}>
+          <TrendingUp size={14} style={{ color: "var(--purple)" }} aria-hidden="true" />
+        </div>
+        <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Outcomes</h2>
+        <span className="ml-auto text-xs font-semibold badge" style={{ background: "var(--bg-sunken)", color: "var(--text-muted)" }}>
+          {total} today
+        </span>
+      </div>
+      <ul className="space-y-3" role="list">
+        {outcomes.map(({ label, count, Icon, bg, color }) => {
+          const pct = Math.round((count / total) * 100);
+          return (
+            <li key={label} className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+                <Icon size={14} style={{ color }} aria-hidden="true" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
+                  <span className="text-xs font-bold" style={{ color }}>{count}</span>
+                </div>
+                <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-sunken)" }}>
+                  <motion.div className="h-full rounded-full" style={{ background: color }} initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }} />
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </motion.section>
   );
 }
 
-function DashboardPanel({ 
-  onSelectMeeting, recentCalls, recentlyBooked, upcomingBookings 
-}: { 
+function DashboardPanel({
+  onSelectMeeting,
+  recentCalls,
+  recentlyBooked,
+  upcomingBookings,
+}: {
   onSelectMeeting: (m: Meeting) => void;
   recentCalls: Meeting[];
   recentlyBooked: Meeting[];
   upcomingBookings: Meeting[];
 }) {
   const [openList, setOpenList] = useState<"recent" | "booked" | "upcoming" | null>(null);
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
       {/* Main Stage (8 Cols on Desktop) */}
@@ -7236,22 +7550,34 @@ const TABS = [
   { id: "profile", icon: UserCircle2, label: "Profile" },
 ];
 
-export default function DashboardHome() {
+export interface DashboardHomeProps {
+  initialClinicId?: string;
+  isAdmin: boolean;
+  isInspectionMode?: boolean;
+  previewClinicId?: string;
+  clinicName?: string;
+  userEmail?: string;
+  initialTab?: string;
+}
+
+export default function DashboardHome({
+  initialClinicId,
+  isAdmin,
+  isInspectionMode = false,
+  previewClinicId,
+  clinicName,
+  userEmail,
+  initialTab = "dashboard",
+}: DashboardHomeProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { resolvedTheme } = useTheme();
-  
-  const previewClinicId = searchParams.get("previewClinicId");
-  
-  // Instant Optimistic Tab State (0ms latency)
-  const [activeTab, setActiveTab] = useState<string>(searchParams.get("tab") || "dashboard");
+
+  const [activeTab, setActiveTab] = useState<string>(searchParams.get("tab") || initialTab);
   const [selectedMeeting, setSelected] = useState<Meeting | null>(null);
-  const [clinicId, setClinicId] = useState<string | undefined>(previewClinicId || undefined);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [inspectClinicName, setInspectClinicName] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  
+
   const [recentCalls, setRecentCalls] = useState<Meeting[]>(initialRecentCalls);
   const [recentlyBooked, setRecentlyBooked] = useState<Meeting[]>(initialRecentlyBooked);
   const [upcomingBookings, setUpcomingBookings] = useState<Meeting[]>(initialUpcomingBookings);
@@ -7260,62 +7586,47 @@ export default function DashboardHome() {
 
   useEffect(() => {
     setMounted(true);
+
+    if (!initialClinicId) return;
+
     const supabase = createClient();
+    const channel = supabase
+      .channel(`public:call_records:${initialClinicId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "call_records",
+          filter: `clinic_id=eq.${initialClinicId}`,
+        },
+        (payload) => {
+          const row = payload.new as any;
+          if (!row) return;
 
-    async function fetchUserContext() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const userIsAdmin = user.user_metadata?.role === "admin";
-        setIsAdmin(userIsAdmin);
-
-        const targetClinicId = (userIsAdmin && previewClinicId) ? previewClinicId : undefined;
-
-        if (targetClinicId) {
-          setClinicId(targetClinicId);
-
-          if (userIsAdmin && previewClinicId) {
-            const { data: c } = await supabase.from("clinics").select("name").eq("id", targetClinicId).single();
-            if (c) setInspectClinicName(c.name);
-          }
-
-          // Realtime Supabase Subscription
-          const channel = supabase
-            .channel(`public:call_records:${targetClinicId}`)
-            .on(
-              "postgres_changes",
-              { event: "*", schema: "public", table: "call_records", filter: `clinic_id=eq.${targetClinicId}` },
-              (payload) => {
-                const row = payload.new as any;
-                if (!row) return;
-
-                const newMeeting: Meeting = {
-                  id: Date.now(),
-                  name: row.patient_name || "Unknown Caller",
-                  type: row.service_type || "General Inquiry",
-                  time: "Just now",
-                  status: row.status || "Completed",
-                  transcriptPreview: row.transcript_preview || undefined,
-                  bookedAt: row.outcome === "booked" ? "just now" : undefined,
-                };
-
-                setRecentCalls((prev) => [newMeeting, ...prev]);
-                if (row.outcome === "booked") {
-                  setRecentlyBooked((prev) => [newMeeting, ...prev]);
-                }
-              }
-            )
-            .subscribe();
-
-          return () => {
-            supabase.removeChannel(channel);
+          const newMeeting: Meeting = {
+            id: Date.now(),
+            name: row.patient_name || "Unknown Caller",
+            type: row.service_type || "General Inquiry",
+            time: "Just now",
+            status: row.status || "Completed",
+            transcriptPreview: row.transcript_preview || undefined,
+            bookedAt: row.outcome === "booked" ? "just now" : undefined,
           };
-        }
-      }
-    }
-    fetchUserContext();
-  }, [previewClinicId]);
 
-  // Instant Optimistic Switch + Background URL sync
+          setRecentCalls((prev) => [newMeeting, ...prev]);
+          if (row.outcome === "booked") {
+            setRecentlyBooked((prev) => [newMeeting, ...prev]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [initialClinicId]);
+
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
     const params = new URLSearchParams(searchParams.toString());
@@ -7328,15 +7639,18 @@ export default function DashboardHome() {
   return (
     <div className="min-h-screen font-sans dashboard-bg flex flex-col">
       {/* Admin Inspection Banner */}
-      {isAdmin && previewClinicId && (
+      {isAdmin && isInspectionMode && (
         <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md z-40 relative">
           <div className="flex items-center gap-2">
             <Eye size={16} />
-            <span>Admin Inspection Mode: Viewing live dashboard for <strong>{inspectClinicName || previewClinicId}</strong></span>
+            <span>
+              Admin Inspection Mode: Viewing live dashboard for <strong>{clinicName || previewClinicId}</strong>
+            </span>
           </div>
-          <button 
+          <button
+            type="button"
             onClick={() => router.push("/admin")}
-            className="flex items-center gap-1 bg-slate-950 text-white px-3 py-1 rounded-lg hover:bg-slate-800 transition-colors"
+            className="flex items-center gap-1 bg-slate-950 text-white px-3 py-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <ArrowLeft size={12} /> Return to Admin Command Center
           </button>
@@ -7360,17 +7674,20 @@ export default function DashboardHome() {
             <h1 className="text-base md:text-lg font-extrabold leading-tight tracking-tight" style={{ color: "var(--text-primary)" }}>
               <span style={{ color: "var(--teal)" }}>Pyrexx</span> AI
             </h1>
-            <p className="text-[10px] hidden sm:block font-medium leading-tight" style={{ color: "var(--text-muted)" }}>AI Receptionist</p>
+            <p className="text-[10px] hidden sm:block font-medium leading-tight" style={{ color: "var(--text-muted)" }}>
+              {clinicName ? `${clinicName} · AI Receptionist` : "AI Receptionist"}
+            </p>
           </div>
         </div>
 
-        {/* Desktop Header Navigation Tabs (Visible on lg/xl displays) */}
+        {/* Desktop Header Navigation Tabs */}
         <div className="hidden lg:flex items-center gap-1 mx-auto bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-full border border-slate-300/40 dark:border-slate-700/40">
           {TABS.map(({ id, icon: Icon, label }) => {
             const isActive = activeTab === id;
             return (
               <button
                 key={id}
+                type="button"
                 onClick={() => handleTabChange(id)}
                 className="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer"
                 style={
@@ -7396,7 +7713,7 @@ export default function DashboardHome() {
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} variants={containerV} initial="hidden" animate="show" exit={{ opacity: 0, transition: { duration: 0.1 } }}>
             {activeTab === "dashboard" ? (
-              <DashboardPanel 
+              <DashboardPanel
                 onSelectMeeting={setSelected}
                 recentCalls={recentCalls}
                 recentlyBooked={recentlyBooked}
@@ -7405,7 +7722,12 @@ export default function DashboardHome() {
             ) : activeTab === "analytics" ? (
               <AnalyticsPanel />
             ) : (
-              <ProfilePanel clinicId={clinicId} />
+              <ProfilePanel
+                clinicId={initialClinicId}
+                isAdmin={isAdmin}
+                isInspectionMode={isInspectionMode}
+                userEmail={userEmail}
+              />
             )}
           </motion.div>
         </AnimatePresence>
@@ -7421,12 +7743,20 @@ export default function DashboardHome() {
           borderRadius: "9999px",
           boxShadow: "var(--shadow-lg)",
         }}
-        initial={{ y: 48, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, type: "spring", damping: 22 }}
+        initial={{ y: 48, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2, type: "spring", damping: 22 }}
       >
         {TABS.map(({ id, icon: Icon, label }) => {
           const isActive = activeTab === id;
           return (
-            <button key={id} onClick={() => handleTabChange(id)} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-200" style={isActive ? { background: "var(--teal)", color: "#fff", boxShadow: "0 2px 8px rgba(72,196,198,0.35)" } : { color: "var(--text-muted)", background: "transparent" }}>
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleTabChange(id)}
+              className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-200"
+              style={isActive ? { background: "var(--teal)", color: "#fff", boxShadow: "0 2px 8px rgba(72,196,198,0.35)" } : { color: "var(--text-muted)", background: "transparent" }}
+            >
               <Icon size={15} />
               <span className="hidden sm:inline">{label}</span>
             </button>

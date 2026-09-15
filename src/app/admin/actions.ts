@@ -16,6 +16,30 @@ async function requireAdmin() {
   return createAdminClient();
 }
 
+/**
+ * Creates a clinic record for an offline/manual sale (admin collected
+ * payment outside Dodo — e.g. invoiced, comped, or a legacy client
+ * being migrated in) and skips the checkout step entirely.
+ *
+ * STATUS FIX: this previously set `status: "pending_setup"`, which
+ * made the clinic permanently un-loginable — /api/onboarding/finish
+ * (the ONLY code path that creates a login) requires
+ * `status === "onboarding"` and 404s otherwise, and there was no
+ * other way to create the owner's auth user for a manually-added
+ * clinic. Setting `status: "onboarding"` here routes these clients
+ * through the exact same password-setup step as a paid signup
+ * (`/signup/finish?clinicId=...` → AccountStep → /api/onboarding/finish),
+ * just without the payment step in between. `finish` still advances
+ * the clinic to `pending_setup` once the owner sets a password,
+ * matching the paid flow's status progression.
+ *
+ * `subscription_status: "active"` is intentional here (not a bug) —
+ * billing was handled outside the system, so there's no Dodo webhook
+ * coming to set this later.
+ *
+ * Returns `setupUrl` so the admin can hand it directly to the client
+ * — there's no automated email step yet (tracked separately).
+ */
 export async function createManualClient(data: {
   name: string;
   contact_email: string;
@@ -30,16 +54,29 @@ export async function createManualClient(data: {
     .from("clinics")
     .insert({
       ...data,
+      name: data.name.trim(),
+      contact_email: data.contact_email.trim().toLowerCase(),
+      phone_number: data.phone_number.trim(),
+      receptionist_name: data.receptionist_name.trim(),
       plan_price_cents: data.plan_tier === "full_time" ? 150000 : 100000,
-      status: "pending_setup",
+      status: "onboarding",
       subscription_status: "active",
     })
     .select("*")
     .single();
 
-  if (error) return { error: error.message };
+  if (error) {
+    // Postgres 23505 = unique violation (duplicate contact_email)
+    if (error.code === "23505") {
+      return { error: "A clinic with this contact email already exists." };
+    }
+    return { error: error.message };
+  }
+
   revalidatePath("/admin");
-  return { success: true, clinicId: clinic.id };
+
+  const setupUrl = `/signup/finish?clinicId=${clinic.id}`;
+  return { success: true, clinicId: clinic.id, setupUrl };
 }
 
 export async function disconnectAgent(clinicId: string) {

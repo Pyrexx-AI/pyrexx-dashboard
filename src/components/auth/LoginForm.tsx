@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { isWhitelistedAdminEmail } from "@/lib/auth/admin";
+import { isWhitelistedAdminEmail } from "@/lib/auth/admin-client";
 import LogoMark from "@/components/LogoMark";
 
 export default function LoginForm() {

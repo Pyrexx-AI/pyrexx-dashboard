@@ -1,33 +1,31 @@
+/**
+ * Admin Verification — Server Only
+ * ───────────────────────────────────────────────────────────────
+ * SERVER-ONLY. This file calls `createAdminClient()` (service-role
+ * Supabase client, defined in lib/supabase/server.ts), which
+ * imports "next/headers". It must NEVER be imported — even
+ * transitively — from a "use client" file. Doing so previously
+ * broke the production build entirely and caused runtime 500s /
+ * stale-build 404s (see lib/auth/admin-client.ts for the full
+ * incident writeup and the fix).
+ *
+ * Safe import sites: Server Components, Route Handlers, Server
+ * Actions, and proxy.ts (Next.js 16's middleware equivalent, which
+ * runs on the Node.js runtime and can safely use this).
+ *
+ * For the browser-safe email-whitelist check alone (e.g. from
+ * LoginForm.tsx, a Client Component), import
+ * `isWhitelistedAdminEmail` from "@/lib/auth/admin-client" directly
+ * — do not import it from this file.
+ */
 import { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
+import { isWhitelistedAdminEmail } from "@/lib/auth/admin-client";
 
-/**
- * Fallback administrative emails and domain that are ALWAYS granted executive privileges.
- */
-export const HARDCODED_ADMIN_EMAILS = [
-  "admin@pyrexxai.com",
-  "clifford@pyrexxai.com",
-  "hello@pyrexxai.com",
-];
-
-/**
- * Fast synchronous check for known admin email addresses or domain patterns.
- */
-export function isWhitelistedAdminEmail(email?: string | null): boolean {
-  if (!email) return false;
-  const normalized = email.toLowerCase().trim();
-
-  if (HARDCODED_ADMIN_EMAILS.includes(normalized)) return true;
-  if (normalized.endsWith("@pyrexxai.com")) return true;
-
-  const envAdmin = process.env.ADMIN_EMAIL?.toLowerCase().trim();
-  if (envAdmin && envAdmin === normalized) return true;
-
-  const envAdmins = process.env.ADMIN_EMAILS?.toLowerCase().split(",").map((e) => e.trim());
-  if (envAdmins && envAdmins.includes(normalized)) return true;
-
-  return false;
-}
+// Re-exported for convenience / backwards compatibility for any
+// existing server-side import sites — still safe here since this
+// whole file is already server-only.
+export { HARDCODED_ADMIN_EMAILS, isWhitelistedAdminEmail } from "@/lib/auth/admin-client";
 
 /**
  * Single source of truth for verifying admin status across Next.js Server Components,

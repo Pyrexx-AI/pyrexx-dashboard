@@ -5,7 +5,8 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Clock, CheckCircle2, AlertTriangle, Plus, DollarSign, Activity, 
-  Users, Loader2, Search, Bot, Database as DbIcon, X, Eye, FileText 
+  Users, Loader2, Search, Bot, Database as DbIcon, X, Eye, FileText,
+  Copy, Check, Link2
 } from "lucide-react";
 import { createManualClient } from "@/app/admin/actions";
 import type { Database, ClinicStatus, PlanTier, CrmProvider } from "@/types/database";
@@ -23,7 +24,15 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  
+
+  // Populated after a successful manual-client creation — shown in
+  // place of the form so the admin can copy the link and send it to
+  // the client. Without this, there was no way to actually get a
+  // manually-added clinic a working login (see createManualClient's
+  // doc comment in app/admin/actions.ts for the full fix).
+  const [createdSetupUrl, setCreatedSetupUrl] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   const [form, setForm] = useState({
     name: "", contact_email: "", phone_number: "", receptionist_name: "Aria", plan_tier: "overflow" as PlanTier, crm_provider: "none" as CrmProvider
   });
@@ -47,10 +56,33 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
     const res = await createManualClient(form);
     setLoading(false);
     if (res.success) {
-      setIsModalOpen(false);
+      // Don't close the modal yet — show the setup link first so the
+      // admin can actually copy it. Closing it here (the old
+      // behavior) meant the link was generated and then thrown away,
+      // leaving no way to invite this client to set a password.
+      setCreatedSetupUrl(res.setupUrl ?? null);
       setForm({ name: "", contact_email: "", phone_number: "", receptionist_name: "Aria", plan_tier: "overflow", crm_provider: "none" });
     } else {
       alert(res.error);
+    }
+  }
+
+  function closeAddClientModal() {
+    setIsModalOpen(false);
+    setCreatedSetupUrl(null);
+    setLinkCopied(false);
+  }
+
+  async function handleCopySetupLink() {
+    if (!createdSetupUrl) return;
+    const fullUrl = `${window.location.origin}${createdSetupUrl}`;
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // Clipboard API can fail (permissions, non-secure context) —
+      // the link is still visible and selectable in the input below.
     }
   }
 
@@ -137,57 +169,113 @@ export default function AdminDashboardClient({ clinics, metrics }: { clinics: Cl
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 dark:bg-[#0A0514]/70 backdrop-blur-sm"
-              onClick={() => !loading && setIsModalOpen(false)}
+              onClick={() => !loading && closeAddClientModal()}
             />
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 15 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 15 }}
               className="relative card w-full max-w-lg p-0 overflow-hidden flex flex-col"
             >
               <div className="px-6 py-4 flex justify-between items-center border-b" style={{ borderColor: "var(--border-subtle)" }}>
-                <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Manual Client Setup</h2>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" style={{ color: "var(--text-muted)" }}>
+                <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+                  {createdSetupUrl ? "Client Created" : "Manual Client Setup"}
+                </h2>
+                <button onClick={closeAddClientModal} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" style={{ color: "var(--text-muted)" }}>
                   <X size={18} />
                 </button>
               </div>
-              
-              <form onSubmit={handleAddClient} className="p-6 flex flex-col gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Clinic Name</label>
-                    <input required placeholder="Radiance MedSpa" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, name: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Phone Number</label>
-                    <input required placeholder="+1 (555) 123-4567" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, phone_number: e.target.value})} />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Contact Email</label>
-                  <input required type="email" placeholder="owner@clinic.com" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, contact_email: e.target.value})} />
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Plan Tier</label>
-                    <select className="w-full px-3 py-2.5 rounded-xl text-sm outline-none cursor-pointer appearance-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} value={form.plan_tier} onChange={e => setForm({...form, plan_tier: e.target.value as PlanTier})}>
-                      <option value="overflow">Overflow ($1,000/mo)</option>
-                      <option value="full_time">Full Time ($1,500/mo)</option>
-                    </select>
+              {createdSetupUrl ? (
+                /*
+                 * Success state — shows the setup link the client
+                 * needs to create their password and get into the
+                 * dashboard. This is the fix for the bug where
+                 * manually-added clients had no way to ever log in:
+                 * the clinic is created with status "onboarding" (see
+                 * createManualClient), and this link routes them
+                 * through the same AccountStep used by paid signups.
+                 */
+                <div className="p-6 flex flex-col gap-4">
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs" style={{ background: "var(--success-surface)", color: "var(--success-text)" }}>
+                    <CheckCircle2 size={14} className="flex-shrink-0" />
+                    <span>Clinic created. Send the client this link so they can set their password:</span>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>AI Name</label>
-                    <input required placeholder="Aria" value={form.receptionist_name} className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, receptionist_name: e.target.value})} />
-                  </div>
-                </div>
 
-                <div className="flex gap-3 justify-end mt-6 pt-4 border-t" style={{ borderColor: "var(--border-subtle)" }}>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors" style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}>Cancel</button>
-                  <button type="submit" disabled={loading} className="px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-60" style={{ background: "var(--teal)", color: "#fff" }}>
-                    {loading && <Loader2 size={15} className="animate-spin" />} Create & Bypass Billing
-                  </button>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                      Setup Link
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1 min-w-0">
+                        <Link2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} />
+                        <input
+                          readOnly
+                          value={typeof window !== "undefined" ? `${window.location.origin}${createdSetupUrl}` : createdSetupUrl}
+                          onFocus={(e) => e.target.select()}
+                          className="w-full pl-9 pr-3 py-2.5 rounded-xl text-xs font-mono outline-none truncate"
+                          style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopySetupLink}
+                        className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold flex-shrink-0 transition-colors"
+                        style={{ background: linkCopied ? "var(--success-surface)" : "var(--teal)", color: linkCopied ? "var(--success-text)" : "#fff" }}
+                      >
+                        {linkCopied ? <Check size={14} /> : <Copy size={14} />}
+                        {linkCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+                      This link stops working once they've set a password, or if you change the clinic's status away from "New Signup".
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end mt-2 pt-4 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                    <button type="button" onClick={closeAddClientModal} className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors" style={{ background: "var(--teal)", color: "#fff" }}>
+                      Done
+                    </button>
+                  </div>
                 </div>
-              </form>
+              ) : (
+                <form onSubmit={handleAddClient} className="p-6 flex flex-col gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Clinic Name</label>
+                      <input required placeholder="Radiance MedSpa" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, name: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Phone Number</label>
+                      <input required placeholder="+1 (555) 123-4567" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, phone_number: e.target.value})} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Contact Email</label>
+                    <input required type="email" placeholder="owner@clinic.com" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, contact_email: e.target.value})} />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Plan Tier</label>
+                      <select className="w-full px-3 py-2.5 rounded-xl text-sm outline-none cursor-pointer appearance-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} value={form.plan_tier} onChange={e => setForm({...form, plan_tier: e.target.value as PlanTier})}>
+                        <option value="overflow">Overflow ($1,000/mo)</option>
+                        <option value="full_time">Full Time ($1,500/mo)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>AI Name</label>
+                      <input required placeholder="Aria" value={form.receptionist_name} className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} onChange={e => setForm({...form, receptionist_name: e.target.value})} />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 justify-end mt-6 pt-4 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                    <button type="button" onClick={closeAddClientModal} className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors" style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)" }}>Cancel</button>
+                    <button type="submit" disabled={loading} className="px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-60" style={{ background: "var(--teal)", color: "#fff" }}>
+                      {loading && <Loader2 size={15} className="animate-spin" />} Create & Bypass Billing
+                    </button>
+                  </div>
+                </form>
+              )}
             </motion.div>
           </div>
         )}
