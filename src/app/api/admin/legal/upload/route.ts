@@ -1,20 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
 
-const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15MB — generous for a text-based legal doc, cheap guard against pathological uploads
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15MB limit
 
 /**
- * Converts mammoth's DOCX→HTML output into the markdown subset that
- * DocumentSigner.tsx's `renderMarkdown()` already knows how to
- * render (h1/h2/h3 via "#"/"##"/"###", "- " list items, "**bold**",
- * "---" rules, blank-line-separated paragraphs).
- *
- * This is intentionally small and lossy (no nested lists, no
- * tables, no links) — legal documents uploaded here are
- * headings + paragraphs + occasional bold/list text, and that's
- * what the reader actually needs to render correctly.
+ * Polyfill browser-native globals required by pdfjs-dist / pdf-parse v2 in
+ * serverless Node.js environments where @napi-rs/canvas is not installed.
+ * These stubs provide the coordinate matrix and path constructs needed for
+ * text content extraction without crashing during module evaluation.
+ */
+function ensurePdfGlobals() {
+  const g = globalThis as any;
+
+  if (typeof g.DOMMatrix === "undefined") {
+    g.DOMMatrix = class DOMMatrix {
+      m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+      m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+      m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+      m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+      is2D = true;
+      isIdentity = true;
+
+      inverse() { return new g.DOMMatrix(); }
+      multiply() { return new g.DOMMatrix(); }
+      translate() { return new g.DOMMatrix(); }
+      scale() { return new g.DOMMatrix(); }
+      rotate() { return new g.DOMMatrix(); }
+      transformPoint(point: any) { return point || { x: 0, y: 0, z: 0, w: 1 }; }
+    };
+  }
+
+  if (typeof g.Path2D === "undefined") {
+    g.Path2D = class Path2D {
+      addPath() {}
+      closePath() {}
+      moveTo() {}
+      lineTo() {}
+      bezierCurveTo() {}
+      quadraticCurveTo() {}
+      arc() {}
+      arcTo() {}
+      ellipse() {}
+      rect() {}
+    };
+  }
+
+  if (typeof g.ImageData === "undefined") {
+    g.ImageData = class ImageData {
+      width: number;
+      height: number;
+      data: Uint8ClampedArray;
+      colorSpace: string = "srgb";
+
+      constructor(wOrData: any, hOrW?: any, h?: any) {
+        if (typeof wOrData === "number") {
+          this.width = wOrData;
+          this.height = hOrW || 0;
+          this.data = new Uint8ClampedArray(this.width * this.height * 4);
+        } else {
+          this.data = wOrData;
+          this.width = hOrW;
+          this.height = h || (wOrData.length / (4 * hOrW));
+        }
+      }
+    };
+  }
+}
+
+/**
+ * Converts mammoth's DOCX->HTML output into the markdown subset that
+ * DocumentSigner.tsx understands.
  */
 function docxHtmlToMarkdown(html: string): string {
   return html
@@ -30,7 +87,7 @@ function docxHtmlToMarkdown(html: string): string {
     .replace(/<i[^>]*>(.*?)<\/i>/gi, "*$1*")
     .replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "") // strip anything else mammoth emitted (spans, images, etc.)
+    .replace(/<[^>]+>/g, "")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
@@ -40,9 +97,7 @@ function docxHtmlToMarkdown(html: string): string {
 }
 
 /**
- * Turns pdf-parse's raw extracted text into paragraph-separated
- * markdown, stripping the "-- N of M --" page-break markers
- * pdf-parse inserts between pages.
+ * Normalizes extracted PDF text into clean paragraph-separated markdown.
  */
 function pdfTextToMarkdown(title: string, rawText: string): string {
   const cleaned = rawText
@@ -58,46 +113,64 @@ function pdfTextToMarkdown(title: string, rawText: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createAdminClient();
+    const adminSupabase = createAdminClient();
 
-    // Verify calling user is an Admin
+    // Verify caller is an authenticated administrator (supports Bearer header and session cookie)
+    let callerUser: any = null;
     const authHeader = req.headers.get("authorization");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(authHeader?.replace("Bearer ", "") || "");
+    const token = authHeader?.replace("Bearer ", "").trim();
 
-    if (userError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (token) {
+      const { data: { user } } = await adminSupabase.auth.getUser(token);
+      callerUser = user;
     }
 
-    const { data: profile } = await supabase
+    if (!callerUser) {
+      const cookieSupabase = await createClient();
+      const { data: { user } } = await cookieSupabase.auth.getUser();
+      callerUser = user;
+    }
+
+    if (!callerUser) {
+      return NextResponse.json({ error: "Unauthorized: Invalid or missing session." }, { status: 401 });
+    }
+
+    const { data: profile } = await adminSupabase
       .from("profiles")
       .select("role")
-      .eq("id", user.id)
-      .single();
+      .eq("id", callerUser.id)
+      .maybeSingle();
 
     if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden: Admin access required." }, { status: 403 });
     }
 
-    const formData = await req.formData();
+    const formData = await req.formData().catch(() => null);
+    if (!formData) {
+      return NextResponse.json({ error: "Invalid form data payload." }, { status: 400 });
+    }
+
     const file = formData.get("file") as File | null;
     const documentType = formData.get("documentType") as string;
     const title = formData.get("title") as string;
-    const version = formData.get("version") as string || "v1.0.0";
+    const version = (formData.get("version") as string) || "v1.0.0";
     const manualMarkdown = formData.get("manualMarkdown") as string | null;
 
     if (!documentType || !title) {
-      return NextResponse.json({ error: "Missing documentType or title" }, { status: 400 });
+      return NextResponse.json({ error: "Missing documentType or title." }, { status: 400 });
     }
 
     if (file && file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: `File too large — limit is ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB` }, { status: 413 });
+      return NextResponse.json(
+        { error: `File too large — maximum limit is ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB.` },
+        { status: 413 }
+      );
     }
 
     let markdownContent = manualMarkdown || "";
     let fileUrl: string | null = null;
     let fileType: string | null = null;
 
-    // Process uploaded file if provided (.pdf, .docx, .txt, .md)
     if (file) {
       fileType = file.name.split(".").pop()?.toLowerCase() || null;
       const arrayBuffer = await file.arrayBuffer();
@@ -106,88 +179,106 @@ export async function POST(req: NextRequest) {
       if (fileType === "txt" || fileType === "md") {
         markdownContent = buffer.toString("utf-8");
       } else if (fileType === "docx") {
-        /*
-         * REAL EXTRACTION (previously this ran a regex over the raw
-         * file bytes as if a .docx were plain XML text — but .docx
-         * is a ZIP archive, so that regex could never match real
-         * content and silently produced a placeholder every time.
-         * mammoth actually unzips the archive and reads
-         * word/document.xml properly.
-         */
         try {
           const { value: html, messages } = await mammoth.convertToHtml({ buffer });
           if (messages.some((m) => m.type === "error")) {
-            console.warn(`DOCX conversion warnings for "${file.name}":`, messages);
+            console.warn(`DOCX conversion warning for "${file.name}":`, messages);
           }
           markdownContent = docxHtmlToMarkdown(html);
         } catch (docxErr) {
           console.error(`DOCX extraction failed for "${file.name}":`, docxErr);
           return NextResponse.json(
-            { error: "Could not read this .docx file — it may be corrupted or password-protected. Try re-saving it and uploading again." },
+            { error: "Could not parse this .docx file. It may be corrupted or password-protected." },
             { status: 422 }
           );
         }
 
         if (!markdownContent.trim()) {
           return NextResponse.json(
-            { error: "No readable text found in this .docx file." },
+            { error: "No readable text content found in this .docx file." },
             { status: 422 }
           );
         }
       } else if (fileType === "pdf") {
-        /*
-         * REAL EXTRACTION (previously this never parsed the PDF at
-         * all — it stored a placeholder string telling the reader
-         * to "review the official PDF version," meaning nothing was
-         * ever actually shown to clients signing this document).
-         */
-        let parser: PDFParse | null = null;
+        // Apply globals first to ensure Node.js can safely evaluate the PDF.js legacy engine
+        ensurePdfGlobals();
+
+        let parserInstance: any = null;
         try {
-          parser = new PDFParse({ data: buffer });
-          const result = await parser.getText();
-          markdownContent = pdfTextToMarkdown(title, result.text);
-        } catch (pdfErr) {
+          let CanvasFactory: any = undefined;
+          try {
+            const workerModule = await import("pdf-parse/worker");
+            CanvasFactory = workerModule.CanvasFactory;
+          } catch {
+            // Worker is optional when globals are directly shimmed on globalThis
+          }
+
+          const { PDFParse } = await import("pdf-parse");
+          const parseConfig = CanvasFactory
+            ? { data: new Uint8Array(buffer), CanvasFactory }
+            : { data: new Uint8Array(buffer) };
+
+          parserInstance = new PDFParse(parseConfig);
+          const result = await parserInstance.getText();
+          markdownContent = pdfTextToMarkdown(title, result?.text || "");
+        } catch (pdfErr: any) {
           console.error(`PDF extraction failed for "${file.name}":`, pdfErr);
           return NextResponse.json(
-            { error: "Could not read this PDF — it may be a scanned image without a text layer, encrypted, or corrupted." },
+            {
+              error:
+                pdfErr?.message ||
+                "Could not extract text from this PDF. It may be a scanned image without an OCR layer or encrypted.",
+            },
             { status: 422 }
           );
         } finally {
-          if (parser) await parser.destroy();
+          if (parserInstance && typeof parserInstance.destroy === "function") {
+            try {
+              await parserInstance.destroy();
+            } catch {
+              // Non-fatal cleanup
+            }
+          }
         }
 
         if (!markdownContent.trim()) {
           return NextResponse.json(
-            { error: "No extractable text found in this PDF — it may be a scanned image. Try the manual markdown field instead." },
+            {
+              error:
+                "No extractable text found in this PDF (it may be a rasterized image). Please use the Markdown editor below.",
+            },
             { status: 422 }
           );
         }
       }
 
-      // Save original binary file to Supabase Storage if configured
+      // Upload the raw document binary to Supabase Storage if the bucket exists
       try {
         const fileName = `${documentType}-${Date.now()}.${fileType}`;
-        const { data: storageData, error: storageErr } = await supabase.storage
+        const { data: storageData, error: storageErr } = await adminSupabase.storage
           .from("agreements-vault")
           .upload(fileName, buffer, {
-            contentType: file.type,
+            contentType: file.type || "application/octet-stream",
             upsert: true,
           });
 
         if (!storageErr && storageData) {
           fileUrl = storageData.path;
         }
-      } catch (storageException) {
-        console.warn("Supabase Storage upload warning (falling back to database record only):", storageException);
+      } catch (storageEx) {
+        console.warn("Storage upload notice (falling back to database record only):", storageEx);
       }
     }
 
     if (!markdownContent.trim()) {
-      return NextResponse.json({ error: "No content provided in file or markdown body" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No content provided. Please upload a valid document or paste Markdown clauses." },
+        { status: 400 }
+      );
     }
 
     // Upsert into legal_documents table
-    const { data: updatedDoc, error: dbError } = await supabase
+    const { data: updatedDoc, error: dbError } = await adminSupabase
       .from("legal_documents")
       .upsert(
         {
@@ -213,6 +304,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, document: updatedDoc });
   } catch (err: any) {
     console.error("Legal document upload exception:", err);
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "Internal server error occurred while processing document." },
+      { status: 500 }
+    );
   }
 }

@@ -28,25 +28,6 @@ const itemV: Variants = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } },
 };
 
-/*
- * REAL DATA NOTE:
- * This component previously seeded `recentCalls` / `recentlyBooked`
- * / `upcomingBookings` from hardcoded mock arrays ("Sarah Jenkins,
- * Botox Consult", etc.) and NEVER called the real
- * /api/dashboard/summary or /api/dashboard/metrics endpoints — both
- * already existed and were fully authenticated/authorized, they
- * were just never wired up. Every clinic saw the exact same fake
- * dashboard regardless of their actual call activity. The only
- * "live" mechanism was the Supabase Realtime subscription below,
- * which prepended new rows onto the mock seed data.
- *
- * Fixed by fetching both endpoints on mount (and whenever the
- * clinic changes), with loading/empty states, and by wiring the
- * DonutChart trio / InsightsCard / OutcomesCard to
- * /api/dashboard/metrics's real aggregates instead of static
- * numbers.
- */
-
 const EMPTY_METRICS: DashboardMetrics = {
   range: "7D",
   totalCalls: 0,
@@ -78,6 +59,24 @@ function statusStyle(status: string) {
     case "Confirmed": return { bg: "var(--teal-surface)",    color: "var(--teal-text)",    Icon: CheckCircle2 };
     default:          return { bg: "var(--warning-surface)", color: "var(--warning-text)", Icon: AlertCircle };
   }
+}
+
+/**
+ * Deduplicates and updates meeting records in place by matching ID.
+ * Prevents multiple updates across call lifecycle events (started -> ended -> analyzed)
+ * from rendering duplicated cards.
+ */
+function upsertMeeting(list: Meeting[], incoming: Meeting): Meeting[] {
+  const existingIndex = list.findIndex(
+    (m) => String(m.id) === String(incoming.id) || (m.name === incoming.name && m.time === incoming.time)
+  );
+
+  if (existingIndex >= 0) {
+    const updated = [...list];
+    updated[existingIndex] = { ...updated[existingIndex], ...incoming };
+    return updated;
+  }
+  return [incoming, ...list];
 }
 
 function MeetingRow({ meeting, onSelect }: { meeting: Meeting; onSelect: (m: Meeting) => void }) {
@@ -164,7 +163,7 @@ function InsightsCard({ serviceBreakdown, loading }: { serviceBreakdown: Service
         <EmptyRow label="No calls yet this week" />
       ) : (
         <>
-          <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img">
+          <div className="flex h-2 rounded-full overflow-hidden gap-0.5" role="img" aria-label="Call intents breakdown bar">
             {intents.map((i) => (
               <div key={i.label} className="rounded-full" style={{ width: `${i.pct}%`, background: i.color }} />
             ))}
@@ -433,29 +432,35 @@ export default function DashboardHome({
         },
         (payload) => {
           const row = payload.new as any;
-          if (!row) return;
+          if (!row || !row.id) return;
 
-          const newMeeting: Meeting = {
-            id: Date.now(),
+          // Format meeting item with real call ID
+          const incomingMeeting: Meeting = {
+            id: row.id,
             name: row.patient_name || "Unknown Caller",
             type: row.service_type || "General Inquiry",
-            time: "Just now",
+            time: row.booking_time
+              ? new Date(row.booking_time).toLocaleString("en-US", {
+                  weekday: "short",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "Just now",
             status: row.status || "Completed",
             transcriptPreview: row.transcript_preview || undefined,
             bookedAt: row.outcome === "booked" ? "just now" : undefined,
           };
 
-          setRecentCalls((prev) => [newMeeting, ...prev]);
+          // Deterministic in-place update or prepend
+          setRecentCalls((prev) => upsertMeeting(prev, incomingMeeting));
+
           if (row.outcome === "booked") {
-            setRecentlyBooked((prev) => [newMeeting, ...prev]);
+            setRecentlyBooked((prev) => upsertMeeting(prev, incomingMeeting));
           }
-          // Note: this only appends to the two list cards in real
-          // time. The KPI/trend numbers from /api/dashboard/metrics
-          // don't recompute live — they refresh on next mount/tab
-          // switch. Re-aggregating client-side on every realtime
-          // event would need the raw record set kept in sync here
-          // too; deferred as a follow-up rather than scope-creeping
-          // this fix.
+
+          if (row.booking_time && new Date(row.booking_time) >= new Date()) {
+            setUpcomingBookings((prev) => upsertMeeting(prev, incomingMeeting));
+          }
         }
       )
       .subscribe();

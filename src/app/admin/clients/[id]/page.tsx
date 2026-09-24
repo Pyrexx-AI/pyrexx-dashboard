@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import ClientSetupForm from "@/components/admin/ClientSetupForm";
+import { decryptCredentials } from "@/lib/crypto/credentials";
 
 export const metadata = { title: "Client Setup | Pyrexx Admin" };
 
@@ -47,7 +48,16 @@ export default async function AdminClientDetailPage({
     .select("*")
     .eq("clinic_id", id);
 
-  const crmCredential = credentials?.find((c) => c.provider === "crm") ?? null;
+  const rawCrmCredential = credentials?.find((c) => c.provider === "crm") ?? null;
+  // FIX: `credentials` is now stored encrypted (see
+  // updateCrmCredentials in app/admin/actions.ts) — decrypt it here,
+  // server-side only, before it ever reaches ClientSetupForm (a
+  // client component). decryptCredentials() also transparently
+  // handles any pre-encryption plaintext rows, so this doesn't break
+  // on data written before the fix shipped.
+  const crmCredential = rawCrmCredential
+    ? { ...rawCrmCredential, credentials: decryptCredentials(rawCrmCredential.credentials) as any }
+    : null;
 
   return (
     <div className="flex flex-col gap-5 max-w-3xl mx-auto">

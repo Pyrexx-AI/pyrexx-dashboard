@@ -1,3 +1,4 @@
+// src/lib/retell/provision.ts
 import Retell from "retell-sdk";
 import { createAdminClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
@@ -34,16 +35,9 @@ export interface ProvisionResult {
   error?: string;
 }
 
-export async function provisionAiReceptionistAgent(
-  clinic: Clinic
-): Promise<ProvisionResult> {
+export async function provisionAiReceptionistAgent(clinic: Clinic): Promise<ProvisionResult> {
   const supabase = createAdminClient();
   const client = getClient();
-
-  await supabase
-    .from("clinics")
-    .update({ agent_provisioning_status: "provisioning", agent_provisioning_error: null })
-    .eq("id", clinic.id);
 
   let createdLlmId: string | null = null;
   let createdAgentId: string | null = null;
@@ -51,11 +45,7 @@ export async function provisionAiReceptionistAgent(
   try {
     const escalationNumber = clinic.escalation_phone_number || clinic.phone_number;
 
-    // 1. Create LLM Response Engine
-    // `clinic_id` in default_dynamic_variables is what lets
-    // lib/retell/mapper.ts attribute every inbound call back to this
-    // clinic (see mapper.ts's resolveClinicId doc comment for what
-    // happens — and used to happen — when this is missing).
+    // Step 1: Create LLM Response Engine
     const llm = await client.llm.create({
       model: "gpt-4.1",
       general_prompt: buildSystemPrompt(clinic),
@@ -79,7 +69,7 @@ export async function provisionAiReceptionistAgent(
     });
     createdLlmId = llm.llm_id;
 
-    // 2. Create Retell Agent
+    // Step 2: Create Retell Agent
     const agent = await client.agent.create({
       agent_name: `${clinic.name} — ${clinic.receptionist_name}`,
       voice_id: DEFAULT_VOICE_ID,
@@ -87,22 +77,32 @@ export async function provisionAiReceptionistAgent(
     });
     createdAgentId = agent.agent_id;
 
-    // 3. Purchase Shadow Phone Number & Bind
+    // Step 3: Purchase Shadow Number with Resilient Fallback
     const areaCodeMatch = clinic.phone_number.match(/^\+?1?(\d{3})/);
     const areaCode = areaCodeMatch ? parseInt(areaCodeMatch[1], 10) : undefined;
 
-    const phoneNumber = await client.phoneNumber.create({
-      area_code: areaCode,
-      nickname: `${clinic.name} (Pyrexx shadow number)`,
-      inbound_agents: [{ agent_id: agent.agent_id, weight: 1 }],
-    });
+    let phoneNumberRecord;
+    try {
+      phoneNumberRecord = await client.phoneNumber.create({
+        area_code: areaCode,
+        nickname: `${clinic.name} (Pyrexx shadow number)`,
+        inbound_agents: [{ agent_id: agent.agent_id, weight: 1 }],
+      });
+    } catch (areaCodeErr) {
+      console.warn(`[Provisioning] Area code ${areaCode} unavailable. Retrying with global inventory...`, areaCodeErr);
+      // Fallback: Purchase without strict area code constraint
+      phoneNumberRecord = await client.phoneNumber.create({
+        nickname: `${clinic.name} (Pyrexx shadow number - fallback)`,
+        inbound_agents: [{ agent_id: agent.agent_id, weight: 1 }],
+      });
+    }
 
-    // 4. Update Database
+    // Step 4: Persist State
     await supabase
       .from("clinics")
       .update({
         agent_id: agent.agent_id,
-        agent_phone_number: phoneNumber.phone_number,
+        agent_phone_number: phoneNumberRecord.phone_number,
         agent_provisioning_status: "provisioned",
         agent_provisioning_error: null,
       })
@@ -111,21 +111,18 @@ export async function provisionAiReceptionistAgent(
     return {
       success: true,
       agentId: agent.agent_id,
-      phoneNumber: phoneNumber.phone_number,
+      phoneNumber: phoneNumberRecord.phone_number,
       llmId: llm.llm_id,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown provisioning error";
-    console.error(`Agent provisioning failed for clinic ${clinic.id}:`, message);
+    const message = err instanceof Error ? err.message : "Telephony provisioning failed";
+    console.error(`[Provisioning Error] Clinic ${clinic.id}:`, message);
 
-    // Rollback Cleanup: Delete orphaned agent/LLM if step 3 failed
-    if (createdAgentId) {
-      try {
-        await client.agent.delete(createdAgentId);
-      } catch (e) {
-        console.warn("Rollback cleanup failed for agent:", createdAgentId);
-      }
-    }
+    // Complete Multi-Resource Rollback
+    await Promise.allSettled([
+      createdAgentId ? client.agent.delete(createdAgentId) : Promise.resolve(),
+      createdLlmId ? client.llm.delete(createdLlmId) : Promise.resolve(),
+    ]);
 
     await supabase
       .from("clinics")
