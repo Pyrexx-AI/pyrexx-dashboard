@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Upload, FileText, CheckCircle2, AlertCircle, Loader2, Save, FileCode, Sparkles } from "lucide-react";
+import { Upload, CheckCircle2, AlertCircle, Loader2, Save, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const DOC_TYPES = [
@@ -19,7 +19,7 @@ export default function LegalDocManager() {
   const [version, setVersion] = useState("v1.1.0");
   const [markdown, setMarkdown] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  
+
   const [uploading, setUploading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -61,17 +61,28 @@ export default function LegalDocManager() {
         body: formData,
       });
 
-      const json = await res.json();
+      // Safely read response text first to handle non-JSON HTML error pages gracefully
+      const rawText = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        // Response was not JSON (e.g. 500 HTML error page, 413, or gateway timeout)
+      }
 
       if (!res.ok) {
-        throw new Error(json.error || "Failed to update legal document");
+        const fallbackMsg =
+          res.status === 413
+            ? "File exceeds the 15MB upload limit."
+            : `Upload failed (Status ${res.status}). Please check server logs or paste Markdown directly.`;
+        throw new Error(json?.error || fallbackMsg);
       }
 
       setSuccessMsg(`Successfully updated ${title} (${version})!`);
       setFile(null);
       setMarkdown("");
     } catch (err: any) {
-      setErrorMsg(err.message || "An error occurred during document upload.");
+      setErrorMsg(err.message || "An unexpected error occurred during document upload.");
     } finally {
       setUploading(false);
     }
@@ -143,7 +154,7 @@ export default function LegalDocManager() {
           </div>
         </div>
 
-        {/* Drag & Drop File Upload Area (PDF, DOCX, TXT) */}
+        {/* File Upload Area */}
         <div>
           <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
             Upload File (PDF, DOCX, TXT, MD)
@@ -172,7 +183,7 @@ export default function LegalDocManager() {
                     Click to browse or drop a PDF, Word (.docx), or Text document
                   </p>
                   <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    Automatic formatting extraction enabled
+                    Automatic formatting and markdown extraction enabled
                   </p>
                 </div>
               )}

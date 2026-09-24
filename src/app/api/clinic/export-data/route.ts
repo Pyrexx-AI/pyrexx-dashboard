@@ -1,9 +1,12 @@
 /**
  * GET /api/clinic/export-data?clinicId=...
  * ───────────────────────────────────────────────────────────────
- * Real CSV export of a clinic's call records. Backs
- * ProfilePanel.tsx's "Export Data" button, which previously
- * rendered but did nothing at all.
+ * Real CSV export of a clinic's call records. Backs ProfilePanel.tsx's
+ * "Export Data" button.
+ *
+ * SECURITY: Includes protection against Spreadsheet Formula Injection
+ * (CWE-1236 / CSV Injection) by prefixing leading arithmetic and formula
+ * operators with a single apostrophe.
  *
  * Auth pattern matches /api/dashboard/summary: caller must be an
  * admin, or the owner/staff of the requested clinic.
@@ -12,10 +15,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { callRecordStore } from "@/lib/retell/store";
 
+/**
+ * Escapes CSV special characters and neutralizes Spreadsheet Formula Injection.
+ */
 function csvEscape(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
-  const str = String(value);
-  if (/[",\n]/.test(str)) {
+  let str = String(value);
+
+  // Neutralize CSV Formula Injection: prefix cells starting with =, +, -, @, \t, \r with '
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+
+  if (/[",\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -44,19 +56,31 @@ export async function GET(req: NextRequest) {
   const isOwnClinic = profile?.clinic_id === clinicId;
 
   if (!isAdmin && !isOwnClinic) {
-    return NextResponse.json({ error: "Forbidden: You cannot export another clinic's data." }, { status: 403 });
+    return NextResponse.json(
+      { error: "Forbidden: You cannot export another clinic's data." },
+      { status: 403 }
+    );
   }
 
-  // Covers up to a year back — a hard cap keeps this endpoint fast
-  // and its response size bounded. Pagination/date-range selection
-  // would be the next step if clinics need older history exported.
+  // Covers records up to one year back to keep response sizes bounded
   const since = new Date(Date.now() - 365 * 86_400_000).toISOString();
-  const records = await callRecordStore.getCallRecordsInRange(clinicId, since, new Date().toISOString());
+  const records = await callRecordStore.getCallRecordsInRange(
+    clinicId,
+    since,
+    new Date().toISOString()
+  );
 
   const header = [
-    "Started At", "Patient Name", "Service Type", "Status", "Outcome",
-    "Duration (seconds)", "Booking Time", "Transcript Summary",
+    "Started At",
+    "Patient Name",
+    "Service Type",
+    "Status",
+    "Outcome",
+    "Duration (seconds)",
+    "Booking Time",
+    "Transcript Summary",
   ];
+
   const rows = records.map((r) => [
     r.startedAt,
     r.patientName,
@@ -68,7 +92,10 @@ export async function GET(req: NextRequest) {
     r.transcriptPreview ?? "",
   ]);
 
-  const csv = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+  const csv = [header, ...rows]
+    .map((row) => row.map(csvEscape).join(","))
+    .join("\r\n");
+
   const filename = `call-records-${new Date().toISOString().slice(0, 10)}.csv`;
 
   return new NextResponse(csv, {
@@ -76,6 +103,7 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     },
   });
 }

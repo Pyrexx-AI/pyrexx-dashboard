@@ -1,31 +1,4 @@
-/**
- * POST /api/webhooks/dodo
- * ───────────────────────────────────────────────────────────────
- * Receives Dodo Payments subscription lifecycle events, keeps
- * `clinics.subscription_status` in sync, and — the key piece that
- * makes onboarding "minimal backend setup for the admin" — triggers
- * automated AI Receptionist Agent provisioning the moment a clinic's
- * subscription becomes active.
- *
- * VERIFIED event names + payload shape (checked directly against
- * the installed `dodopayments` package's .d.ts files, not just
- * documentation):
- *   type: 'payment.succeeded' | 'payment.failed' | 'payment.processing'
- *       | 'payment.cancelled' | 'subscription.active' | 'subscription.renewed'
- *       | 'subscription.on_hold' | 'subscription.paused' | 'subscription.cancelled'
- *       | 'subscription.failed' | 'subscription.expired' | ...
- *   data: { subscription_id, customer: { customer_id, email, ... },
- *            product_id, metadata: {...}, status, ... }
- *
- * There is no single "past_due" event — `subscription.on_hold` and
- * `dunning.started` are the closest analogs (payment failed, Dodo is
- * retrying before cancellation) and both map to our 'past_due' status.
- *
- * SECURITY: verified via the Standard Webhooks spec (see
- * lib/dodo/verify-signature.ts) before any processing — invalid
- * signatures are rejected with 401 and never reach the database or
- * trigger provisioning.
- */
+// src/app/api/webhooks/dodo/route.ts
 import { NextRequest, NextResponse, after } from "next/server";
 import { verifyDodoWebhook } from "@/lib/dodo/verify-signature";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -51,17 +24,14 @@ function mapDodoStatus(eventType: string): SubscriptionStatus | null {
     eventType === "subscription.cancelled" ||
     eventType === "subscription.expired" ||
     eventType === "subscription.failed"
-  )
+  ) {
     return "canceled";
+  }
   return null;
 }
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
-
-  // verifyDodoWebhook both checks the signature AND returns the
-  // already-JSON-parsed payload (the standardwebhooks lib does both
-  // in one step) — no separate JSON.parse needed.
   const payload = verifyDodoWebhook(rawBody, req.headers) as unknown as DodoWebhookPayload | null;
 
   if (!payload) {
@@ -70,21 +40,18 @@ export async function POST(req: NextRequest) {
 
   const clinicId = payload.data?.metadata?.clinic_id;
   if (!clinicId) {
-    // Can't route this event to a clinic — acknowledge so Dodo
-    // doesn't retry, but log for investigation. This shouldn't
-    // happen in practice since every checkout session this app
-    // creates sets metadata.clinic_id (see lib/dodo/client.ts).
-    console.warn("Dodo webhook missing clinic_id metadata:", payload.type);
+    console.warn("[Dodo Webhook] Missing clinic_id metadata:", payload.type);
     return NextResponse.json({ received: true });
   }
 
   const status = mapDodoStatus(payload.type);
   if (!status) {
-    // Unrecognized/irrelevant event type for our purposes — ack, no-op.
     return NextResponse.json({ received: true });
   }
 
   const supabase = createAdminClient();
+
+  // 1. Update billing details
   const { data: clinic, error } = await supabase
     .from("clinics")
     .update({
@@ -92,50 +59,38 @@ export async function POST(req: NextRequest) {
       dodo_customer_id: payload.data.customer?.customer_id,
       dodo_subscription_id: payload.data.subscription_id,
       dodo_product_id: payload.data.product_id,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", clinicId)
     .select("*")
     .single();
 
   if (error || !clinic) {
-    console.error("Failed to update clinic subscription status:", error);
+    console.error("[Dodo Webhook] DB update failed:", error);
     return NextResponse.json({ error: "Database update failed" }, { status: 500 });
   }
 
-  // The key automation: the instant a clinic's subscription goes
-  // active for the FIRST time (agent not yet provisioned), kick off
-  // agent creation. Guarded by agent_provisioning_status so renewal
-  // events (which also map to "active") don't re-provision a
-  // already-working agent.
-  //
-  // FIX: this previously did `await provisionAiReceptionistAgent(clinic)`
-  // directly in the request path — Retell provisioning is 3
-  // sequential API calls that can take several seconds, and the
-  // comment here used to (correctly) flag the timeout risk but keep
-  // the synchronous await anyway "to be safe," which was backwards:
-  // it made Dodo's webhook wait through the exact slow operation it
-  // was trying to protect against, with no actual queue in place.
-  // `after()` (stable since Next.js 15, supported in Route Handlers)
-  // returns the response to Dodo immediately while the platform
-  // keeps this function alive in the background until the callback
-  // finishes — solving the timeout risk with zero new infrastructure.
-  if (status === "active" && clinic.agent_provisioning_status === "pending") {
-    after(async () => {
-      const result = await provisionAiReceptionistAgent(clinic);
-      if (!result.success) {
-        // Don't fail the webhook over this — billing succeeded, that
-        // part of the flow is done. The clinic is now in
-        // agent_provisioning_status = 'failed', visible to the admin
-        // in /admin/clients/[id] with a Retry button (manual
-        // fallback, not the default path).
-        console.error(`Auto-provisioning failed for clinic ${clinicId}:`, result.error);
-      }
-    });
+  // 2. ATOMIC CAS PROVISIONING LOCK:
+  // Conditionally transition from 'pending' -> 'provisioning' atomically.
+  // If concurrent webhooks arrive, only the transaction that acquires the lock gets 1 row back.
+  if (status === "active") {
+    const { data: lockedClinic } = await supabase
+      .from("clinics")
+      .update({ agent_provisioning_status: "provisioning", agent_provisioning_error: null })
+      .eq("id", clinicId)
+      .eq("agent_provisioning_status", "pending")
+      .select("*")
+      .maybeSingle();
+
+    if (lockedClinic) {
+      after(async () => {
+        const result = await provisionAiReceptionistAgent(lockedClinic);
+        if (!result.success) {
+          console.error(`[Auto-Provisioning] Failed for clinic ${clinicId}:`, result.error);
+        }
+      });
+    }
   }
 
   return NextResponse.json({ received: true });
-}
-
-export async function GET() {
-  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
 }

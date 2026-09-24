@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { callRecordStore } from "@/lib/retell/store";
 import type { CallRecord } from "@/lib/retell/types";
+import type { Meeting } from "@/components/MeetingModal";
 
-function toMeeting(record: CallRecord, idx: number) {
+function toMeeting(record: CallRecord): Meeting {
   return {
-    id: idx + 1,
+    id: record.id, // Preserves canonical call_id for deterministic realtime upserts
     name: record.patientName,
     type: record.serviceType,
     time: record.bookingTime
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing clinicId" }, { status: 400 });
   }
 
-  // Authorization Check: Verify caller is Admin OR owns the requested clinic
+  // Authorization Check: Verify caller is an Admin or owner/staff of the requested clinic
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, clinic_id")
@@ -49,15 +50,12 @@ export async function GET(req: NextRequest) {
   const isOwnClinic = profile?.clinic_id === clinicId;
 
   if (!isAdmin && !isOwnClinic) {
-    return NextResponse.json({ error: "Forbidden: You cannot access another clinic's call records." }, { status: 403 });
+    return NextResponse.json(
+      { error: "Forbidden: You cannot access another clinic's call records." },
+      { status: 403 }
+    );
   }
 
-  // FIX: previously queried getByStatus(clinicId, "Scheduled", 5) —
-  // but lib/retell/mapper.ts's resolveStatus() never actually
-  // produces "Scheduled" (only "Completed", "Confirmed", or
-  // "Escalated"), so this always returned an empty array regardless
-  // of how many real upcoming bookings existed. getUpcomingBookings
-  // instead looks at real future booking_time values.
   const [recent, confirmed, upcoming] = await Promise.all([
     callRecordStore.getByStatus(clinicId, "Completed", 5),
     callRecordStore.getByStatus(clinicId, "Confirmed", 5),
