@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { verifyAdminStatus } from "@/lib/auth/admin";
 import DashboardHome from "@/components/DashboardHome";
+import type { SubscriptionStatus } from "@/types/database";
 
 export const metadata = {
   title: "Client Dashboard | Pyrexx AI",
@@ -36,6 +37,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   let clinicId: string | undefined = undefined;
   let clinicName: string | undefined = undefined;
+  let subscriptionStatus: SubscriptionStatus | null = null;
   let isInspectionMode = false;
 
   if (isAdmin && previewClinicId) {
@@ -45,11 +47,12 @@ export default async function HomePage({ searchParams }: PageProps) {
 
     const { data: inspectedClinic } = await supabase
       .from("clinics")
-      .select("name")
+      .select("name, subscription_status")
       .eq("id", previewClinicId)
       .single();
 
     clinicName = inspectedClinic?.name || "Inspected Clinic";
+    subscriptionStatus = inspectedClinic?.subscription_status || null;
   } else {
     // Standard clinic user (owner/staff): look up their assigned clinic_id
     const { data: profile } = await supabase
@@ -63,11 +66,12 @@ export default async function HomePage({ searchParams }: PageProps) {
 
       const { data: clinic } = await supabase
         .from("clinics")
-        .select("name")
+        .select("name, subscription_status")
         .eq("id", profile.clinic_id)
         .single();
 
       clinicName = clinic?.name || profile.full_name || "My Clinic";
+      subscriptionStatus = clinic?.subscription_status || null;
     }
   }
 
@@ -82,6 +86,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           clinicName={clinicName}
           userEmail={user.email || ""}
           initialTab={tab}
+          subscriptionStatus={subscriptionStatus}
         />
       </Suspense>
     </main>

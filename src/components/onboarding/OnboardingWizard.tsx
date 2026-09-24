@@ -1,31 +1,7 @@
 "use client";
 
-/**
- * OnboardingWizard — Unified DFY Onboarding Flow
- * ───────────────────────────────────────────────────────────────
- * Order: Clinic → Contact → CRM → Plan → Receptionist → Documents
- *        (sign) → Payment (embedded) → Account (password) → done.
- *
- * This replaces the old two-stage flow (Google Sites doc-signing hub
- * → external payment redirect → separate manual account creation)
- * with everything happening on-domain, in one continuous wizard.
- *
- * KEY DESIGN DECISION — why the clinic record is created mid-flow,
- * not at the very end:
- * The user-visible step order is "sign documents → pay → sign up",
- * but Dodo's checkout session needs a real clinic_id to attach as
- * metadata (so the webhook that confirms payment can find the right
- * clinic). So /api/onboarding/start (creating the clinic row +
- * signed_agreements) fires right after the Documents step, BEFORE
- * payment — invisibly to the user, who just sees "Continue" advance
- * them to Payment like any other step. The auth LOGIN (email +
- * password) is still created last, in /api/onboarding/finish, which
- * is what "Account" step / the user's mental model of "signing up"
- * actually refers to. See api/onboarding/start/route.ts for the full
- * reasoning and the trade-off this implies (abandoned-mid-flow
- * orphan clinic rows).
- */
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Building2, Globe, Phone, Mail, Database,
@@ -73,9 +49,16 @@ const slideVariants: Variants = {
   exit: { opacity: 0, x: -24, transition: { duration: 0.2, ease: "easeIn" } },
 };
 
-/* ─── Field wrapper ─────────────────────────────────────────────── */
-function Field({ label, icon: Icon, children, hint }: {
-  label: string; icon: React.ElementType; children: React.ReactNode; hint?: string;
+function Field({
+  label,
+  icon: Icon,
+  children,
+  hint,
+}: {
+  label: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+  hint?: string;
 }) {
   return (
     <div>
@@ -95,10 +78,15 @@ const inputClass = "w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none tran
 const inputStyle = { background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" } as const;
 
 export default function OnboardingWizard() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>(0);
   const [error, setError] = useState<string | null>(null);
+
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const [creatingClinic, setCreatingClinic] = useState(false);
   const [loadingCheckout, setLoadingCheckout] = useState(false);
+
+  const [paymentPending, setPaymentPending] = useState(false);
 
   // Populated once /api/onboarding/start succeeds (after Documents step).
   const [clinicId, setClinicId] = useState<string | null>(null);
@@ -109,10 +97,6 @@ export default function OnboardingWizard() {
     crmProvider: "", crmOtherName: "", planTier: "", receptionistName: "", signerName: "",
   });
   const [docsSigned, setDocsSigned] = useState(false);
-  // Populated by DocumentSigner once it fetches the active documents
-  // — this is what /api/onboarding/start's signedDocuments payload
-  // is built from, so document_version reflects what was actually
-  // shown, instead of a hardcoded "PLACEHOLDER-v0".
   const [legalDocuments, setLegalDocuments] = useState<LegalDocument[]>([]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -126,7 +110,7 @@ export default function OnboardingWizard() {
       case 3: return form.planTier !== "";
       case 4: return form.receptionistName.trim().length > 0;
       case 5: return docsSigned;
-      case 6: return true; // Payment step advances via the embedded checkout's onClosed event, not Continue
+      case 6: return true;
       default: return false;
     }
   }
@@ -136,15 +120,43 @@ export default function OnboardingWizard() {
     setStep((s) => Math.max(s - 1, 0) as Step);
   }
 
-  /**
-   * Advancing past the Documents step (5 → 6) is when
-   * /api/onboarding/start actually runs — see file-level doc comment
-   * for why this happens here rather than at the very end.
-   */
   async function next() {
     if (!stepValid()) return;
     setError(null);
 
+    // ─── STEP 1: IMMEDIATE EMAIL CHECK ───────────────────────────
+    if (step === 1) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(form.contactEmail.trim())) {
+        setError("Please enter a valid email address.");
+        return;
+      }
+
+      setCheckingEmail(true);
+      try {
+        const res = await fetch("/api/onboarding/check-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: form.contactEmail }),
+        });
+        const json = await res.json();
+        setCheckingEmail(false);
+
+        if (json.exists) {
+          // Email already exists: route immediately to login with email pre-filled
+          router.push(`/login?email=${encodeURIComponent(form.contactEmail.trim().toLowerCase())}&reason=exists`);
+          return;
+        }
+      } catch (err) {
+        console.warn("Email pre-check network error, continuing:", err);
+        setCheckingEmail(false);
+      }
+
+      setStep(2);
+      return;
+    }
+
+    // ─── STEP 5: SAVE CLINIC & PREPARE CHECKOUT ──────────────────
     if (step === 5) {
       setCreatingClinic(true);
       try {
@@ -170,6 +182,10 @@ export default function OnboardingWizard() {
         const json = await res.json();
 
         if (!res.ok) {
+          if (res.status === 409 || json.error?.toLowerCase().includes("already exists")) {
+            router.push(`/login?email=${encodeURIComponent(form.contactEmail.trim().toLowerCase())}&reason=exists`);
+            return;
+          }
           setError(json.error || "Could not save your information. Please try again.");
           setCreatingClinic(false);
           return;
@@ -179,9 +195,7 @@ export default function OnboardingWizard() {
         setCreatingClinic(false);
         setStep(6);
 
-        // Immediately kick off checkout session creation so the
-        // payment step doesn't show its own extra loading state on
-        // top of this one.
+        // Pre-fetch checkout session
         setLoadingCheckout(true);
         const checkoutRes = await fetch("/api/onboarding/checkout", {
           method: "POST",
@@ -192,7 +206,9 @@ export default function OnboardingWizard() {
         setLoadingCheckout(false);
 
         if (!checkoutRes.ok) {
-          setError(checkoutJson.error || "Could not start payment. Please try again.");
+          // If checkout initialization fails, allow bypassing to password creation
+          setPaymentPending(true);
+          setError("Billing service notice: You can set up your account password now and activate billing in your dashboard.");
           return;
         }
         setCheckoutUrl(checkoutJson.checkoutUrl);
@@ -205,6 +221,11 @@ export default function OnboardingWizard() {
     }
 
     setStep((s) => Math.min(s + 1, STEPS.length - 1) as Step);
+  }
+
+  function handlePaymentBypass() {
+    setPaymentPending(true);
+    setStep(7);
   }
 
   return (
@@ -227,10 +248,15 @@ export default function OnboardingWizard() {
         <div className="flex items-center gap-1" role="group" aria-label="Onboarding progress">
           {STEPS.map((label, i) => (
             <div key={label} className="flex-1 flex flex-col gap-1.5 items-center">
-              <div className="h-1.5 w-full rounded-full transition-colors"
-                style={{ background: i <= step ? "var(--teal)" : "var(--bg-sunken)" }} aria-hidden="true" />
-              <span className="text-[9px] font-medium hidden sm:block text-center leading-tight"
-                style={{ color: i === step ? "var(--teal-text)" : "var(--text-muted)" }}>
+              <div
+                className="h-1.5 w-full rounded-full transition-colors"
+                style={{ background: i <= step ? "var(--teal)" : "var(--bg-sunken)" }}
+                aria-hidden="true"
+              />
+              <span
+                className="text-[9px] font-medium hidden sm:block text-center leading-tight"
+                style={{ color: i === step ? "var(--teal-text)" : "var(--text-muted)" }}
+              >
                 {label}
               </span>
             </div>
@@ -265,7 +291,7 @@ export default function OnboardingWizard() {
                 <>
                   <div>
                     <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>How do we reach you?</h2>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>The phone number is what your AI Receptionist will answer.</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>We'll verify your email immediately to streamline sign-in.</p>
                   </div>
                   <Field label="Clinic Phone Number" icon={Phone} hint="The number your AI Receptionist will be connected to.">
                     <input className={inputClass} style={inputStyle} value={form.phoneNumber}
@@ -350,28 +376,54 @@ export default function OnboardingWizard() {
                 <>
                   <div>
                     <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Payment</h2>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Secure checkout — your card is processed by Dodo Payments.</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                      Secure checkout — processed by Dodo Payments.
+                    </p>
                   </div>
                   {loadingCheckout || !checkoutUrl ? (
-                    <div className="flex flex-col items-center justify-center gap-2 py-16">
-                      <Loader2 size={22} className="animate-spin" style={{ color: "var(--teal)" }} aria-hidden="true" />
-                      <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Preparing secure checkout…</p>
+                    <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                      <Loader2 size={24} className="animate-spin" style={{ color: "var(--teal)" }} aria-hidden="true" />
+                      <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Preparing checkout session…</p>
+                      <button
+                        type="button"
+                        onClick={handlePaymentBypass}
+                        className="mt-2 text-xs font-semibold underline text-teal-600 dark:text-teal-400 cursor-pointer"
+                      >
+                        Skip and complete account password setup now
+                      </button>
                     </div>
                   ) : (
-                    <EmbeddedCheckout
-                      checkoutUrl={checkoutUrl}
-                      onClosed={() => setStep(7)}
-                    />
+                    <div className="flex flex-col gap-3">
+                      <EmbeddedCheckout
+                        checkoutUrl={checkoutUrl}
+                        onClosed={() => setStep(7)}
+                        onError={() => setPaymentPending(true)}
+                      />
+                      <div className="pt-2 text-center border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                        <button
+                          type="button"
+                          onClick={handlePaymentBypass}
+                          className="text-xs font-semibold py-1.5 transition-colors cursor-pointer hover:underline"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          Complete payment later? Set up your password now &rarr;
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </>
               )}
 
               {/* ── Step 7: Account ─────────────────────────────── */}
               {step === 7 && clinicId && (
-                <AccountStep clinicId={clinicId} contactEmail={form.contactEmail} />
+                <AccountStep
+                  clinicId={clinicId}
+                  contactEmail={form.contactEmail}
+                  paymentPending={paymentPending}
+                />
               )}
 
-              {/* Error */}
+              {/* Error Banner */}
               {error && (
                 <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs" style={{ background: "var(--error-surface)", color: "var(--error-text)" }} role="alert">
                   <AlertCircle size={14} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -381,22 +433,31 @@ export default function OnboardingWizard() {
             </motion.div>
           </AnimatePresence>
 
-          {/* Nav buttons — hidden on Payment (advances via the embed's own close event) and Account (has its own submit) */}
+          {/* Navigation Controls */}
           {step < 6 && (
             <div className="flex items-center gap-3 mt-6">
               {step > 0 && (
-                <button type="button" onClick={back}
+                <button
+                  type="button"
+                  onClick={back}
+                  disabled={checkingEmail || creatingClinic}
                   className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors"
-                  style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
+                  style={{ background: "var(--bg-sunken)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+                >
                   <ArrowLeft size={14} aria-hidden="true" /> Back
                 </button>
               )}
               <div className="flex-1" />
-              <button type="button" onClick={next} disabled={!stepValid() || creatingClinic}
+              <button
+                type="button"
+                onClick={next}
+                disabled={!stepValid() || checkingEmail || creatingClinic}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: "var(--teal)", color: "#fff" }}>
-                {creatingClinic && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-                {creatingClinic ? "Saving…" : "Continue"} {!creatingClinic && <ArrowRight size={14} aria-hidden="true" />}
+                style={{ background: "var(--teal)", color: "#fff" }}
+              >
+                {(checkingEmail || creatingClinic) && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                {checkingEmail ? "Checking email…" : creatingClinic ? "Saving…" : "Continue"}{" "}
+                {!checkingEmail && !creatingClinic && <ArrowRight size={14} aria-hidden="true" />}
               </button>
             </div>
           )}
