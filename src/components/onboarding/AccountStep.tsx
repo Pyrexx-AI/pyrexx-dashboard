@@ -1,18 +1,23 @@
-// src/components/onboarding/AccountStep.tsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { Lock, AlertCircle, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 
 interface AccountStepProps {
   clinicId: string;
   contactEmail?: string;
+  paymentPending?: boolean;
   /** Called after a successful account creation, before the auto-redirect timer. */
   onSuccess?: () => void;
 }
 
-export default function AccountStep({ clinicId, contactEmail, onSuccess }: AccountStepProps) {
+export default function AccountStep({
+  clinicId,
+  contactEmail,
+  paymentPending = false,
+  onSuccess,
+}: AccountStepProps) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +63,6 @@ export default function AccountStep({ clinicId, contactEmail, onSuccess }: Accou
     }
   }
 
-  /* ─── The Database Fix View ────────────────────────────────────────────── */
   if (dbFixRequired) {
     const sqlSnippet = `-- Fix failing auth.users trigger
 create or replace function public.handle_new_user()
@@ -93,9 +97,9 @@ create trigger on_auth_user_created
           <AlertCircle size={22} className="flex-shrink-0" />
           <h2 className="text-base font-bold leading-tight">Database Configuration Needed</h2>
         </div>
-        
+
         <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-          Your Supabase instance is blocking user creation due to a failing background database trigger. 
+          Your Supabase instance is blocking user creation due to a failing background database trigger.
           To fix this permanently, run the following SQL snippet in your Supabase SQL Editor:
         </p>
 
@@ -106,7 +110,10 @@ create trigger on_auth_user_created
         </div>
 
         <button
-          onClick={(e) => { setDbFixRequired(false); handleSubmit(e); }}
+          onClick={(e) => {
+            setDbFixRequired(false);
+            handleSubmit(e);
+          }}
           className="w-full flex items-center justify-center gap-2 py-3 mt-1 rounded-xl text-sm font-semibold cursor-pointer transition-colors"
           style={{ background: "var(--teal)", color: "#fff" }}
         >
@@ -125,8 +132,9 @@ create trigger on_auth_user_created
         <div>
           <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>You're all set!</h2>
           <p className="text-sm mt-1.5 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-            Your account is ready. Our team is now setting up your AI Receptionist
-            — we'll email you as soon as it's connected, usually within 1 business day.
+            {paymentPending
+              ? "Your dashboard account is ready. You can log in now and activate your AI Receptionist plan whenever you are ready."
+              : "Your account is ready. Our team is now setting up your AI Receptionist — we'll email you as soon as it's connected, usually within 1 business day."}
           </p>
         </div>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>Redirecting to sign in…</p>
@@ -142,6 +150,25 @@ create trigger on_auth_user_created
           {contactEmail ? `You'll use ${contactEmail} to sign in.` : "Almost done — set a password for your dashboard."}
         </p>
       </div>
+
+      {paymentPending && (
+        <div
+          className="flex items-start gap-2.5 p-3 rounded-xl text-xs leading-relaxed"
+          style={{
+            background: "var(--warning-surface)",
+            color: "var(--warning-text)",
+            border: "1px solid rgba(217, 119, 6, 0.25)",
+          }}
+        >
+          <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <div>
+            <p className="font-bold">Payment Not Completed</p>
+            <p className="mt-0.5">
+              Your card was not charged. Set your password now so you can access your dashboard. You can retry and activate your subscription directly inside your account.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>Password</label>

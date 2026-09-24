@@ -7,7 +7,7 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   LayoutDashboard, BarChart3, ChevronRight, CalendarCheck, Sparkles,
   CheckCircle2, Clock, AlertCircle, CalendarClock, TrendingUp, Zap, UserCircle2,
-  Eye, ArrowLeft, Loader2, Inbox
+  Eye, ArrowLeft, Loader2, Inbox, AlertTriangle, CreditCard
 } from "lucide-react";
 import DonutChart from "./DonutChart";
 import MeetingModal, { Meeting } from "./MeetingModal";
@@ -18,6 +18,7 @@ import ProfilePanel from "./ProfilePanel";
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "./ui/ThemeToggle";
 import type { DashboardMetrics, OutcomeCounts, ServiceBreakdownEntry } from "@/lib/dashboard/metrics";
+import type { SubscriptionStatus } from "@/types/database";
 
 const containerV: Variants = {
   hidden: { opacity: 0 },
@@ -61,11 +62,6 @@ function statusStyle(status: string) {
   }
 }
 
-/**
- * Deduplicates and updates meeting records in place by matching ID.
- * Prevents multiple updates across call lifecycle events (started -> ended -> analyzed)
- * from rendering duplicated cards.
- */
 function upsertMeeting(list: Meeting[], incoming: Meeting): Meeting[] {
   const existingIndex = list.findIndex(
     (m) => String(m.id) === String(incoming.id) || (m.name === incoming.name && m.time === incoming.time)
@@ -341,6 +337,7 @@ export interface DashboardHomeProps {
   clinicName?: string;
   userEmail?: string;
   initialTab?: string;
+  subscriptionStatus?: SubscriptionStatus | null;
 }
 
 export default function DashboardHome({
@@ -351,6 +348,7 @@ export default function DashboardHome({
   clinicName,
   userEmail,
   initialTab = "dashboard",
+  subscriptionStatus = null,
 }: DashboardHomeProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -368,6 +366,7 @@ export default function DashboardHome({
 
   const [metrics, setMetrics] = useState<DashboardMetrics>(EMPTY_METRICS);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
+  const [openingBilling, setOpeningBilling] = useState(false);
 
   const tabPanelId = useId();
 
@@ -434,7 +433,6 @@ export default function DashboardHome({
           const row = payload.new as any;
           if (!row || !row.id) return;
 
-          // Format meeting item with real call ID
           const incomingMeeting: Meeting = {
             id: row.id,
             name: row.patient_name || "Unknown Caller",
@@ -451,7 +449,6 @@ export default function DashboardHome({
             bookedAt: row.outcome === "booked" ? "just now" : undefined,
           };
 
-          // Deterministic in-place update or prepend
           setRecentCalls((prev) => upsertMeeting(prev, incomingMeeting));
 
           if (row.outcome === "booked") {
@@ -477,7 +474,26 @@ export default function DashboardHome({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
+  async function handleActivateSubscription() {
+    if (!initialClinicId) return;
+    setOpeningBilling(true);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clinicId: initialClinicId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Could not generate payment link");
+      window.location.href = json.checkoutUrl;
+    } catch (err: any) {
+      alert(err.message || "Failed to initialize payment.");
+      setOpeningBilling(false);
+    }
+  }
+
   const isDark = mounted && resolvedTheme === "dark";
+  const isUnsubscribed = initialClinicId && !isAdmin && subscriptionStatus !== "active";
 
   return (
     <div className="min-h-screen font-sans dashboard-bg flex flex-col">
@@ -553,6 +569,45 @@ export default function DashboardHome({
 
       {/* Main Workspace */}
       <main id={`${tabPanelId}-panel`} className="flex-1 px-4 md:px-8 max-w-7xl mx-auto w-full pt-5 pb-28 lg:pb-12">
+        {/* Inactive Subscription Warning Banner */}
+        {isUnsubscribed && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-5 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+            style={{
+              background: "var(--warning-surface)",
+              border: "1.5px solid rgba(217, 119, 6, 0.35)",
+              color: "var(--warning-text)",
+            }}
+          >
+            <div className="flex items-start sm:items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "rgba(217, 119, 6, 0.15)" }}
+              >
+                <AlertTriangle size={20} style={{ color: "var(--warning-text)" }} aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">Subscription Inactive — AI Receptionist Paused</p>
+                <p className="text-xs opacity-90 mt-0.5 leading-relaxed">
+                  Your account is ready, but your plan is not yet active. Set up billing now to deploy your receptionist and answer patient calls.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleActivateSubscription}
+              disabled={openingBilling}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex-shrink-0 shadow-sm disabled:opacity-60"
+              style={{ background: "var(--warning-text)", color: "#fff" }}
+            >
+              {openingBilling ? <Loader2 size={13} className="animate-spin" /> : <CreditCard size={13} />}
+              {openingBilling ? "Opening checkout…" : "Activate Subscription"}
+            </button>
+          </motion.div>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} variants={containerV} initial="hidden" animate="show" exit={{ opacity: 0, transition: { duration: 0.1 } }}>
             {activeTab === "dashboard" ? (
@@ -580,7 +635,7 @@ export default function DashboardHome({
         </AnimatePresence>
       </main>
 
-      {/* Floating Bottom Nav (Mobile/Tablet display only) */}
+      {/* Floating Bottom Nav (Mobile display) */}
       <motion.nav
         className="lg:hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center p-1.5 gap-1"
         style={{

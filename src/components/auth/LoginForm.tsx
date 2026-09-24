@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isWhitelistedAdminEmail } from "@/lib/auth/admin-client";
 import LogoMark from "@/components/LogoMark";
@@ -11,7 +11,11 @@ import LogoMark from "@/components/LogoMark";
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
+
+  const queryEmail = searchParams.get("email") || "";
+  const reason = searchParams.get("reason");
+
+  const [email, setEmail] = useState(queryEmail);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -89,6 +93,23 @@ export default function LoginForm() {
           </div>
         </div>
 
+        {reason === "exists" && (
+          <div
+            className="flex items-start gap-2.5 p-3 rounded-xl text-xs leading-relaxed"
+            style={{
+              background: "var(--info-surface)",
+              color: "var(--info-text)",
+              border: "1px solid rgba(29, 78, 216, 0.2)",
+            }}
+            role="status"
+          >
+            <Info size={15} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <span>
+              An account with this email already exists. Enter your password below to sign in.
+            </span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
             <label htmlFor="email" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
@@ -123,6 +144,7 @@ export default function LoginForm() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoFocus={Boolean(queryEmail)}
                 className="w-full pl-9 py-2.5 rounded-xl text-sm outline-none transition-colors"
                 style={{ paddingRight: "2.5rem", background: "var(--bg-sunken)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
                 placeholder="••••••••"
