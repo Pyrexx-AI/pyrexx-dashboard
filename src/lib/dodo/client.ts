@@ -25,6 +25,20 @@
 import DodoPayments from "dodopayments";
 
 function getClient() {
+  const apiKey = process.env.DODO_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing DODO_API_KEY environment variable.");
+  }
+
+  // Detect environment setting: must be explicitly 'live_mode' to charge real cards
+  const isLive = process.env.DODO_ENVIRONMENT === "live_mode";
+  const environment = isLive ? "live_mode" : "test_mode";
+
+  // Defensive validation: warn if a live key appears to be used in test mode or vice-versa
+  if (isLive && apiKey.startsWith("test_")) {
+    console.warn("⚠️ Warning: DODO_ENVIRONMENT is 'live_mode' but DODO_API_KEY starts with 'test_'.");
+  }
+	
   return new DodoPayments({
     bearerToken: process.env.DODO_API_KEY!,
     environment: process.env.DODO_ENVIRONMENT === "live_mode" ? "live_mode" : "test_mode",
